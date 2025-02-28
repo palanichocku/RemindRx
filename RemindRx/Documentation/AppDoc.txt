@@ -1,0 +1,123 @@
+# RemindRx App: High-Level Flow and Component Interaction
+
+Here's a comprehensive view of how the app flows from launch to the various user interactions, and how the major components work together:
+
+## App Initialization Flow
+
+1. **App Launch**
+   - `RemindRxApp.swift` is the entry point (marked with `@main`)
+   - Core Data stack is initialized through `PersistentContainer.shared`
+   - `MedicineStore` is created as a StateObject with the Core Data context
+   - Notification permissions are requested
+
+2. **Main UI Setup**
+   - `ContentView` is loaded as the root view
+   - TabView is initialized with three tabs (Medicines, Scan, About)
+   - Each tab has its own NavigationView
+
+## Key Components and Their Relationships
+
+### Data Layer
+- **CoreDataModel**: Defines the database schema for storing medicines
+- **CoreDataManager**: Handles all database operations (CRUD)
+- **PersistentContainer**: Manages the Core Data stack and context
+- **Medicine**: Swift struct that represents a medicine in the app
+- **MedicineEntity**: Core Data entity that represents a medicine in the database
+
+### Business Logic Layer
+- **MedicineStore**: Central view model that:
+  - Manages the medicines collection
+  - Coordinates between UI, CoreDataManager, and NotificationManager
+  - Handles barcode lookups through DrugLookupService
+  - Maintains app state (loading, errors, etc.)
+
+- **DrugLookupService**: Performs API lookups across multiple drug databases
+  - Tries OpenFDA, RxNav, UPC Item Database, and NDC List in sequence
+  - Converts API responses to Medicine objects
+
+- **NotificationManager**: Manages expiration notifications
+  - Schedules notifications based on medicine expiration dates
+  - Responds to notification interactions
+
+### UI Layer
+- **ContentView**: Main container with TabView for navigation
+- **MedicineListView**: Shows all medicines and their expiration status
+- **MedicineDetailView**: Shows detailed information about a medicine
+- **MedicineFormView**: Form for adding or editing medicine details
+- **BarcodeScannerView & ScannerViewModel**: Handle barcode scanning
+- **QuickScanView**: Dedicated screen for quick scanning
+- **AboutView**: Shows app information
+
+### Supporting Components
+- **AppDelegate**: Handles app lifecycle events and notifications
+- **Constants**: App-wide constants, styles, and string resources
+- **Utility Views**: ExpiryBadgeView, DeleteConfirmationAlert, etc.
+
+## User Interaction Flows
+
+### Adding a Medicine (Barcode Scanning)
+1. User taps "Scan" tab or scan button in main list
+2. `BarcodeScannerView` is presented using `sheet`
+3. Camera is activated through `AVCaptureSession`
+4. When barcode is detected:
+   - `BarcodeScannerView` returns the barcode string
+   - `MedicineStore.lookupDrug()` is called
+   - `DrugLookupService` attempts to find drug info across multiple APIs
+   - If found, `MedicineFormView` is shown pre-populated
+   - If not found, an error is shown and empty form is presented
+5. User completes the form and taps "Save"
+6. `MedicineStore.save()` is called
+7. `CoreDataManager` saves to database
+8. `NotificationManager` schedules an expiration notification
+
+### Adding a Medicine (Manual Entry)
+1. User taps "Add Manually" button
+2. Empty `MedicineFormView` is presented
+3. User fills in details and taps "Save"
+4. Same save flow as above (steps 6-8)
+
+### Viewing & Managing Medicines
+1. User views the main list in `MedicineListView`
+2. Medicines are displayed with name and expiration status
+3. User can filter to see only expired medicines with toggle
+4. Tapping a medicine opens `MedicineDetailView`
+5. User can delete a medicine (swipe or delete button)
+   - `MedicineStore.delete()` is called
+   - `CoreDataManager` removes from database
+   - `NotificationManager` cancels related notifications
+
+## Data Flow Example: Full Lifecycle of a Medicine
+
+1. **Creation**:
+   - Barcode scanned → `DrugLookupService` → Medicine object
+   - User completes form → Medicine object saved
+   - `MedicineStore` → `CoreDataManager` → Core Data
+
+2. **Persistence**:
+   - Medicine stored as `MedicineEntity` in Core Data database
+   - `CoreDataManager` handles the conversion between Medicine (struct) and MedicineEntity
+
+3. **Retrieval**:
+   - App launch/refresh → `MedicineStore.loadMedicines()`
+   - `CoreDataManager` fetches from database and converts to Medicine objects
+   - `MedicineStore` publishes updated medicines array
+
+4. **Display**:
+   - `MedicineListView` observes `MedicineStore` and updates UI
+   - Medicine expiration status calculated and displayed with `ExpiryBadgeView`
+
+5. **Notifications**:
+   - `NotificationManager` schedules notifications based on expiration date
+   - When notification triggers, user is alerted
+   - Tapping notification can navigate to specific medicine
+
+6. **Deletion**:
+   - User deletes medicine → `MedicineStore.delete()`
+   - `CoreDataManager` removes from database
+   - `NotificationManager` cancels notifications
+   - UI updates to reflect deleted medicine
+
+This high-level overview shows how the components work together to provide a cohesive experience from data management to user interface. The app follows MVVM architecture where:
+- Model: Medicine/MedicineEntity and CoreData
+- View: SwiftUI views (MedicineListView, DetailView, etc.)
+- ViewModel: MedicineStore and other services

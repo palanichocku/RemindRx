@@ -1,0 +1,85 @@
+Prompt:
+
+I want to develop an iOS app called RemindRx. Here is the requirement for the app:
+* It needs to follow Apple's app and UI standard
+* Here are the use cases/requirements for this app:
+   * User needs to be able to scan a drug or medicine using the drug's barcode and add it to a catalog
+   * Once scanned successfully, it should automatically load a form with the populated drug details - Name, Short Description, Manufacturer, Type, Alert and Expiration Date
+   * Type can be a dropdown with two choices - Prescription or OTC. Default will be OTC
+   * Alert will be reminder type that can alert the user on the expiration date - Intervals can be a week, a day, a month, 60 or 90 days. Default will be a week.
+   * If it was not able to scan successfully or errored off or unable to get any barcode hits via the APIs, it should load the medicine detail form so the
+     user can enter the medicine details manually
+   * The listing can have a detailed view and a short list view. When clicking on the short list view, it should load the detailed view. The short list view
+     will contain only the following: Name and Expiration Date. Clicking on the name should load the detailed medicine view.
+    * User needs to be able to delete any medicine either in a short view or a detailed view
+    * The short view can be a tile with delete option
+   * It needs to use publicly available multiple bar code databases to identify the drug using any available API calls. It needs to be very robust so it can
+     get most of the barcodes available in a drug store. It needs to have an excellent barcode scanner where it does not add any superficial prefixeslike 0 etc.,
+     It needs to scan the barcode very accurately as it is very important to the integrity of this app. We want to use the best scanner out there.
+   * Since the expiration date is not available via the Barcode/API typically, user needs to have the ability to easily set the expiration date manually
+     in a date slider after a successful scan
+   * User needs to be able to delete the entire catalog to clean it out to start fresh if needed with a warning
+   * It should list a short view of all the drugs and needs to have a 'Show Expired' toggle that shows only expired drugs on the main screen
+   * It must have an About to describe what the app does with developer and support information
+   * It should be very modern and simple
+   
+   ===================================
+
+Structure
+
+RemindRx/
+├── App/
+│   ├── RemindRxApp.swift
+│   ├── AppDelegate.swift
+│   └── SceneDelegate.swift
+├── Models/
+│   ├── Medicine.swift
+│   └── CoreDataModel.xcdatamodeld
+├── Views/
+│   ├── Home/
+│   │   ├── MedicineListView.swift
+│   │   └── MedicineTileView.swift
+│   ├── Detail/
+│   │   └── MedicineDetailView.swift
+│   ├── Form/
+│   │   └── MedicineFormView.swift
+│   ├── Scanner/
+│   │   ├── BarcodeScannerView.swift
+│   │   └── ScannerOverlayView.swift
+│   ├── About/
+│   │   └── AboutView.swift
+│   └── Components/
+│       ├── ExpiryBadgeView.swift
+│       └── DeleteConfirmationAlert.swift
+├── ViewModels/
+│   ├── MedicineStore.swift
+│   └── ScannerViewModel.swift
+├── Services/
+│   ├── DrugLookupService.swift
+│   ├── NotificationManager.swift
+│   └── CoreDataManager.swift
+├── Utilities/
+│   ├── DateFormatter+Extensions.swift
+│   ├── UIColor+AppColors.swift
+│   └── Constants.swift
+├── Resources/
+│   ├── Assets.xcassets
+│   ├── LaunchScreen.storyboard
+│   └── Info.plist
+└── Documentation/
+    └── README.md
+    
+
+AppDelegate.swift: Sets up the app's lifecycle, notifications, and Core Data stack.
+SceneDelegate.swift: Manages the app's scene lifecycle and initializes the main view with the required dependencies.
+CoreDataModel.xcdatamodeld: Defines the Core Data model with a MedicineEntity containing all the necessary attributes for storing medicine information.
+BarcodeScannerView.swift: Implements a SwiftUI wrapper around a UIKit-based barcode scanner using AVFoundation.
+ScannerOverlayView.swift: Creates both SwiftUI and UIKit overlay views for the scanner with visual guidance elements.
+ExpiryBadgeView.swift: Provides a reusable badge component that displays expiration status (expired, expiring soon, valid) with appropriate colors and icons.
+DeleteConfirmationAlert.swift: Implements a reusable alert component for confirming deletion actions.
+MedicineStore.swift: The central view model that manages medicine data, handles barcode lookups, and coordinates with Core Data and notifications.
+ScannerViewModel.swift: Manages the scanner state, permissions, and barcode validation.
+DrugLookupService.swift: Implements a robust multi-API approach to look up drug information from various databases.
+CoreDataManager.swift: Handles all Core Data operations including fetching, saving, and deleting medicines.
+Constants.swift: Contains app-wide constants, colors, strings, and formatting utilities for consistent UI and functionality.
+

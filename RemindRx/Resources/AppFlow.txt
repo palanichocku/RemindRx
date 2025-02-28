@@ -1,0 +1,70 @@
+//
+//  AppFlow.txt
+//  RemindRx
+//
+//  Created by Palam Chocku on 2/27/25.
+//
+
+Here's a visual walkthrough of how a single medicine (MucinexDM) flows through the RemindRx app:
+
+# MucinexDM Flow Through RemindRx App
+
+The diagram above visualizes how a specific medicine (MucinexDM) flows through the RemindRx app from scanning to management. Let me explain each step:
+
+## Step 1: Barcode Scanning
+- User opens the app and taps the "Scan" button or tab
+- Camera activates and the user scans the MucinexDM barcode (e.g., "3086123344578")
+- `BarcodeScannerView` captures this barcode string
+- `DrugLookupService` sends API requests to various drug databases
+- Drug information is retrieved, including:
+  - Name: "MucinexDM"
+  - Manufacturer: "Reckitt Benckiser"
+  - Type: OTC (Over The Counter)
+
+## Step 2: Form Completion
+- `MedicineFormView` is displayed, pre-populated with the data from the APIs
+- User adds the expiration date (12/15/2025) using the date picker
+- User sets alert preference to "1 Month Before"
+- User adds description: "Extended release guaifenesin"
+- User taps the "Save" button
+- `MedicineStore.save()` method is called
+
+## Step 3: Data Storage
+- A `Medicine` object is created with all the details:
+  - UUID: a unique identifier
+  - name: "MucinexDM"
+  - manufacturer: "Reckitt Benckiser"
+  - expirationDate: 12/15/2025
+  - alertInterval: 1 month (.month)
+- `CoreDataManager.saveMedicine()` converts this to a `MedicineEntity`
+- The entity is stored in Core Data persistent storage
+- `NotificationManager` schedules an expiration alert for 11/15/2025 (1 month before expiry)
+
+## Step 4: Viewing & Managing
+- User returns to `MedicineListView` which displays MucinexDM in the list
+- User can tap on the MucinexDM item to see more details
+- `MedicineDetailView` shows all medicine information
+- The medicine shows as "VALID" since it's not close to expiration
+- User can:
+  - View complete medicine details
+  - Delete the medicine if needed
+  - See visual indicators of expiry status
+
+## Future Event: Notification
+- On 11/15/2025, the system will trigger a notification
+- User receives an alert: "MucinexDM will expire on 12/15/2025"
+- Tapping the notification can take the user directly to the medicine details
+
+This flow demonstrates how data moves through the app's components:
+- From UI components (scanner, forms)
+- Through business logic (MedicineStore, DrugLookupService)
+- Into persistent storage (CoreDataManager, Core Data)
+- Back to the UI for display and management
+- And finally to the notification system for alerts
+
+Each component has clear responsibilities and communicates with others through well-defined interfaces, creating a cohesive user experience.
+                                                            
+                                                            
+=================================================================================
+                                                            
+

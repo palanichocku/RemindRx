@@ -9,61 +9,62 @@ struct MedicineListView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-                // Filter toggle
-                HStack {
-                    Toggle("Show Expired Only", isOn: $showExpiredOnly)
-                        .padding(.horizontal)
-                        .toggleStyle(SwitchToggleStyle(tint: .red))
-                }
-                .padding(.vertical, 8)
-                .background(Color(.systemBackground))
-                
-                // Medicine list
-                List {
-                    ForEach(filteredMedicines) { medicine in
-                        MedicineTileView(medicine: medicine)
-                            .swipeActions(edge: .trailing) {
-                                Button(role: .destructive) {
-                                    medicineStore.delete(medicine)
-                                } label: {
-                                    Label("Delete", systemImage: "trash")
-                                }
+            // Filter toggle
+            HStack {
+                Toggle("Show Expired Only", isOn: $showExpiredOnly)
+                    .padding(.horizontal)
+                    .toggleStyle(SwitchToggleStyle(tint: .red))
+            }
+            .padding(.vertical, 8)
+            .background(Color(.systemBackground))
+            
+            // Medicine list
+            List {
+                ForEach(filteredMedicines) { medicine in
+                    MedicineTileView(medicine: medicine)
+                        .swipeActions(edge: .trailing) {
+                            Button(role: .destructive) {
+                                medicineStore.delete(medicine)
+                            } label: {
+                                Label("Delete", systemImage: "trash")
                             }
-                    }
+                        }
                 }
-                .listStyle(InsetGroupedListStyle())
             }
-            .navigationTitle("RemindRx")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
+            .listStyle(InsetGroupedListStyle())
+        }
+        .navigationTitle("RemindRx")
+        .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button {
+                    showingDeleteAllConfirmation = true
+                } label: {
+                    Label("Clear All", systemImage: "trash")
+                }
+            }
+            
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Menu {
                     Button {
-                        showingDeleteAllConfirmation = true
+                        showScannerSheet = true
                     } label: {
-                        Label("Clear All", systemImage: "trash")
+                        Label("Scan Barcode", systemImage: "barcode.viewfinder")
                     }
-                }
-                
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Menu {
-                        Button {
-                            showScannerSheet = true
-                        } label: {
-                            Label("Scan Barcode", systemImage: "barcode.viewfinder")
-                        }
-                        
-                        Button {
-                            showAddMedicineForm = true
-                        } label: {
-                            Label("Add Manually", systemImage: "square.and.pencil")
-                        }
+                    
+                    Button {
+                        showAddMedicineForm = true
                     } label: {
-                        Image(systemName: "plus")
+                        Label("Add Manually", systemImage: "square.and.pencil")
                     }
+                } label: {
+                    Image(systemName: "plus")
                 }
             }
-            .sheet(isPresented: $showScannerSheet) {
-                BarcodeScannerView { result in
+        }
+        .sheet(isPresented: $showScannerSheet) {
+            BarcodeScannerView(
+                onScanCompletion: { result in
                     self.showScannerSheet = false
                     switch result {
                     case .success(let barcode):
@@ -102,19 +103,23 @@ struct MedicineListView: View {
                             expirationDate: Date().addingTimeInterval(60*60*24*90)
                         )
                     }
+                },
+                onCancel: {
+                    self.showScannerSheet = false
                 }
+            )
+        }
+        .sheet(isPresented: $showAddMedicineForm) {
+            MedicineFormView(isPresented: $showAddMedicineForm)
+        }
+        .alert("Delete All Medicines", isPresented: $showingDeleteAllConfirmation) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete All", role: .destructive) {
+                medicineStore.deleteAll()
             }
-            .sheet(isPresented: $showAddMedicineForm) {
-                MedicineFormView(isPresented: $showAddMedicineForm)
-            }
-            .alert("Delete All Medicines", isPresented: $showingDeleteAllConfirmation) {
-                Button("Cancel", role: .cancel) { }
-                Button("Delete All", role: .destructive) {
-                    medicineStore.deleteAll()
-                }
-            } message: {
-                Text("Are you sure you want to delete all medicines? This action cannot be undone.")
-            }
+        } message: {
+            Text("Are you sure you want to delete all medicines? This action cannot be undone.")
+        }
     }
     
     var filteredMedicines: [Medicine] {

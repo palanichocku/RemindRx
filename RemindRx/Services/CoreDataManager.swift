@@ -126,7 +126,8 @@ class CoreDataManager {
             alertInterval: Medicine.AlertInterval(rawValue: entity.alertInterval ?? "week") ?? .week,
             expirationDate: entity.expirationDate ?? Date(),
             dateAdded: entity.dateAdded ?? Date(),
-            barcode: entity.barcode
+            barcode: entity.barcode,
+            source: entity.source
         )
     }
     
@@ -138,6 +139,7 @@ class CoreDataManager {
         entity.alertInterval = medicine.alertInterval.rawValue
         entity.expirationDate = medicine.expirationDate
         entity.barcode = medicine.barcode
+        entity.source = medicine.source // Add source
     }
     
     // MARK: - Notification Related
@@ -177,5 +179,227 @@ class CoreDataManager {
             print("Error fetching medicines needing alerts: \(error)")
             return []
         }
+    }
+}
+
+// CoreDataManager extensions for Adherence Tracking
+extension CoreDataManager {
+    
+    // MARK: - Schedule Operations
+    
+    func fetchAllSchedules() -> [MedicationSchedule] {
+        let request: NSFetchRequest<ScheduleEntity> = ScheduleEntity.fetchRequest()
+        
+        do {
+            let scheduleEntities = try context.fetch(request)
+            return scheduleEntities.compactMap { convertToSchedule($0) }
+        } catch {
+            print("Error fetching schedules: \(error)")
+            return []
+        }
+    }
+    
+    func saveSchedule(_ schedule: MedicationSchedule) {
+        // Check if schedule already exists
+        let request: NSFetchRequest<ScheduleEntity> = ScheduleEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "id == %@", schedule.id as CVarArg)
+        request.fetchLimit = 1
+        
+        do {
+            let results = try context.fetch(request)
+            
+            let scheduleEntity: ScheduleEntity
+            
+            if let existingEntity = results.first {
+                // Update existing entity
+                scheduleEntity = existingEntity
+            } else {
+                // Create new entity
+                scheduleEntity = ScheduleEntity(context: context)
+                scheduleEntity.id = schedule.id
+            }
+            
+            // Update entity properties
+            updateScheduleEntity(scheduleEntity, with: schedule)
+            
+            try context.save()
+        } catch {
+            print("Error saving schedule: \(error)")
+        }
+    }
+    
+    func deleteSchedule(_ schedule: MedicationSchedule) {
+        let request: NSFetchRequest<ScheduleEntity> = ScheduleEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "id == %@", schedule.id as CVarArg)
+        request.fetchLimit = 1
+        
+        do {
+            let results = try context.fetch(request)
+            
+            if let scheduleEntity = results.first {
+                context.delete(scheduleEntity)
+                try context.save()
+            }
+        } catch {
+            print("Error deleting schedule: \(error)")
+        }
+    }
+    
+    // MARK: - Dose Operations
+    
+    func fetchAllDoses() -> [MedicationDose] {
+        let request: NSFetchRequest<DoseEntity> = DoseEntity.fetchRequest()
+        
+        do {
+            let doseEntities = try context.fetch(request)
+            return doseEntities.compactMap { convertToDose($0) }
+        } catch {
+            print("Error fetching doses: \(error)")
+            return []
+        }
+    }
+    
+    func saveDose(_ dose: MedicationDose) {
+        // Check if dose already exists
+        let request: NSFetchRequest<DoseEntity> = DoseEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "id == %@", dose.id as CVarArg)
+        request.fetchLimit = 1
+        
+        do {
+            let results = try context.fetch(request)
+            
+            let doseEntity: DoseEntity
+            
+            if let existingEntity = results.first {
+                // Update existing entity
+                doseEntity = existingEntity
+            } else {
+                // Create new entity
+                doseEntity = DoseEntity(context: context)
+                doseEntity.id = dose.id
+            }
+            
+            // Update entity properties
+            updateDoseEntity(doseEntity, with: dose)
+            
+            try context.save()
+        } catch {
+            print("Error saving dose: \(error)")
+        }
+    }
+    
+    func deleteDose(_ dose: MedicationDose) {
+        let request: NSFetchRequest<DoseEntity> = DoseEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "id == %@", dose.id as CVarArg)
+        request.fetchLimit = 1
+        
+        do {
+            let results = try context.fetch(request)
+            
+            if let doseEntity = results.first {
+                context.delete(doseEntity)
+                try context.save()
+            }
+        } catch {
+            print("Error deleting dose: \(error)")
+        }
+    }
+    
+    // MARK: - Conversion Methods
+    
+    private func convertToSchedule(_ entity: ScheduleEntity) -> MedicationSchedule? {
+        guard let id = entity.id,
+              let medicineId = entity.medicineId,
+              let medicineName = entity.medicineName,
+              let frequencyString = entity.frequency,
+              let frequency = MedicationSchedule.Frequency(rawValue: frequencyString),
+              let startDate = entity.startDate,
+              let timeOfDayData = entity.timeOfDayData else {
+            return nil
+        }
+        
+        // Decode time of day array
+        var timeOfDay: [Date] = []
+        if let decodedTimes = try? NSKeyedUnarchiver.unarchivedObject(ofClass: NSArray.self, from: timeOfDayData) as? [Date] {
+            timeOfDay = decodedTimes
+        }
+        
+        // Decode days of week array
+        var daysOfWeek: [Int]? = nil
+        if let daysData = entity.daysOfWeekData,
+           let decodedDays = try? NSKeyedUnarchiver.unarchivedObject(ofClass: NSArray.self, from: daysData) as? [Int] {
+            daysOfWeek = decodedDays
+        }
+        
+        var schedule = MedicationSchedule(
+            id: id,
+            medicineId: medicineId,
+            medicineName: medicineName,
+            frequency: frequency,
+            timeOfDay: timeOfDay,
+            daysOfWeek: daysOfWeek,
+            active: entity.active,
+            startDate: startDate,
+            endDate: entity.endDate,
+            notes: entity.notes
+        )
+        
+        schedule.customInterval = Int(entity.customInterval)
+        
+        return schedule
+    }
+    
+    private func updateScheduleEntity(_ entity: ScheduleEntity, with schedule: MedicationSchedule) {
+        entity.id = schedule.id
+        entity.medicineId = schedule.medicineId
+        entity.medicineName = schedule.medicineName
+        entity.frequency = schedule.frequency.rawValue
+        entity.active = schedule.active
+        entity.startDate = schedule.startDate
+        entity.endDate = schedule.endDate
+        entity.notes = schedule.notes
+        entity.customInterval = Int16(schedule.customInterval ?? 0)
+        
+        // Encode time of day array
+        if let encodedTimes = try? NSKeyedArchiver.archivedData(withRootObject: schedule.timeOfDay, requiringSecureCoding: false) {
+            entity.timeOfDayData = encodedTimes
+        }
+        
+        // Encode days of week array
+        if let daysOfWeek = schedule.daysOfWeek,
+           let encodedDays = try? NSKeyedArchiver.archivedData(withRootObject: daysOfWeek, requiringSecureCoding: false) {
+            entity.daysOfWeekData = encodedDays
+        } else {
+            entity.daysOfWeekData = nil
+        }
+    }
+    
+    private func convertToDose(_ entity: DoseEntity) -> MedicationDose? {
+        guard let id = entity.id,
+              let medicineId = entity.medicineId,
+              let medicineName = entity.medicineName,
+              let timestamp = entity.timestamp else {
+            return nil
+        }
+        
+        return MedicationDose(
+            id: id,
+            medicineId: medicineId,
+            medicineName: medicineName,
+            timestamp: timestamp,
+            taken: entity.taken,
+            notes: entity.notes,
+            skippedReason: entity.skippedReason
+        )
+    }
+    
+    private func updateDoseEntity(_ entity: DoseEntity, with dose: MedicationDose) {
+        entity.id = dose.id
+        entity.medicineId = dose.medicineId
+        entity.medicineName = dose.medicineName
+        entity.timestamp = dose.timestamp
+        entity.taken = dose.taken
+        entity.notes = dose.notes
+        entity.skippedReason = dose.skippedReason
     }
 }

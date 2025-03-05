@@ -3,130 +3,15 @@ import SwiftUI
 struct ContentView: View {
     @EnvironmentObject var medicineStore: MedicineStore
     @State private var selectedTab = 0
-    
-    var body: some View {
-        TabView(selection: $selectedTab) {
-            NavigationView {
-                MedicineListView()
-                    .navigationTitle("RemindRx")
-                    .navigationBarTitleDisplayMode(.large)
-            }
-            .tabItem {
-                Image(systemName: AppImages.homeTab)
-                Text("Medicines")
-            }
-            .tag(0)
-            
-            NavigationView {
-                QuickScanView()
-                    .navigationTitle("Quick Scan")
-            }
-            .tabItem {
-                Image(systemName: AppImages.scanTab)
-                Text("Scan")
-            }
-            .tag(1)
-            
-            NavigationView {
-                AboutView()
-                    .navigationTitle("About")
-            }
-            .tabItem {
-                Image(systemName: AppImages.aboutTab)
-                Text("About")
-            }
-            .tag(2)
-        }
-        .accentColor(AppColors.primaryFallback())
-        .onAppear {
-            // Load medicines when app appears
-            medicineStore.loadMedicines()
-            
-            // Set tab bar appearance
-            setTabBarAppearance()
-        }
-    }
-    
-    private func setTabBarAppearance() {
-        let appearance = UITabBarAppearance()
-        appearance.configureWithDefaultBackground()
-        
-        UITabBar.appearance().standardAppearance = appearance
-        if #available(iOS 15.0, *) {
-            UITabBar.appearance().scrollEdgeAppearance = appearance
-        }
-    }
-}
-
-struct QuickScanView: View {
-    @EnvironmentObject var medicineStore: MedicineStore
     @State private var showScannerSheet = false
     @State private var showAddMedicineForm = false
-    @State private var scanError: String?
-    @State private var showError = false
+    @State private var showTrackingView = false
+    @State private var showFeatureInDevelopment = false
+    @State private var inDevelopmentFeature = ""
     
-    var body: some View {
-        VStack {
-            Spacer()
-            
-            Image(systemName: "barcode.viewfinder")
-                .font(.system(size: 120))
-                .foregroundColor(AppColors.primaryFallback())
-                .padding()
-            
-            Text("Scan Medicine Barcode")
-                .font(.title2)
-                .fontWeight(.bold)
-                .padding(.bottom, 5)
-            
-            Text("Quickly scan a medicine barcode to add it to your collection.")
-                .font(.body)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 40)
-                .padding(.bottom, 40)
-            
-            Button(action: {
-                showScannerSheet = true
-            }) {
-                HStack {
-                    Image(systemName: "barcode.viewfinder")
-                    Text("Scan Barcode")
-                }
-                .frame(minWidth: 200)
-                .padding()
-                .background(AppColors.primaryFallback())
-                .foregroundColor(.white)
-                .cornerRadius(AppConstants.cornerRadius)
-            }
-            .accessibilityIdentifier(AccessibilityIDs.scanButton)
-            
-            Button(action: {
-                // Reset draft and show form
-                medicineStore.draftMedicine = nil
-                showAddMedicineForm = true
-            }) {
-                HStack {
-                    Image(systemName: "square.and.pencil")
-                    Text("Add Manually")
-                }
-                .frame(minWidth: 200)
-                .padding()
-                .background(Color.clear)
-                .foregroundColor(AppColors.primaryFallback())
-                .overlay(
-                    RoundedRectangle(cornerRadius: AppConstants.cornerRadius)
-                        .stroke(AppColors.primaryFallback(), lineWidth: 1)
-                )
-            }
-            .padding(.top, 10)
-            
-            Spacer()
-        }
-        .padding()
-        .navigationTitle("Quick Scan")
-        .sheet(isPresented: $showScannerSheet) {
-            BarcodeScannerView { result in
+    var scannerSheet: some View {
+        BarcodeScannerView(
+            onScanCompletion: { result in
                 self.showScannerSheet = false
                 switch result {
                 case .success(let barcode):
@@ -148,32 +33,156 @@ struct QuickScanView: View {
                                     expirationDate: Date().addingTimeInterval(Double(60*60*24*AppConstants.defaultExpirationDays)),
                                     barcode: barcode
                                 )
-                                // First show error message
-                                self.scanError = "Barcode lookup failed: Please enter medicine details manually."
-                                self.showError = true
-                                // After dismissing the error, the form will show
+                                
+                                self.showAddMedicineForm = true
                             }
                         }
                     }
-                case .failure(let error):
-                    // Show error for scanner failure
-                    self.scanError = "Scanner error: Please enter medicine details manually."
-                    self.showError = true
-                }
-            }
-        }
-        .sheet(isPresented: $showAddMedicineForm) {
-            MedicineFormView(isPresented: $showAddMedicineForm)
-        }
-        .alert(AppStrings.lookupFailedTitle, isPresented: $showError) {
-            Button("OK", role: .cancel) {
-                // Show the form after user acknowledges the error
-                if self.medicineStore.draftMedicine != nil {
+                case .failure:
+                    // Show empty form for manual entry on scan failure
                     self.showAddMedicineForm = true
+                    self.medicineStore.draftMedicine = Medicine(
+                        name: "",
+                        description: "",
+                        manufacturer: "",
+                        type: .otc,
+                        alertInterval: .week,
+                        expirationDate: Date().addingTimeInterval(Double(60*60*24*AppConstants.defaultExpirationDays))
+                    )
                 }
+            },
+            onCancel: {
+                self.showScannerSheet = false
             }
-        } message: {
-            Text(scanError ?? AppStrings.lookupFailedMessage)
+        )
+    }
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                // Header
+                VStack {
+                    Text("RemindRx")
+                        .font(.largeTitle)
+                        .fontWeight(.bold)
+                        .foregroundColor(AppColors.primaryFallback())
+                    
+                    Text("Medicine Management")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+                .padding(.top)
+                
+                // Main dashboard with icons
+                ScrollView {
+                    VStack(spacing: 20) {
+                        // Main action buttons grid
+                        LazyVGrid(columns: [
+                            GridItem(.flexible()),
+                            GridItem(.flexible())
+                        ], spacing: 20) {
+                            // Scan button
+                            DashboardButton(
+                                title: "Scan",
+                                description: "Scan medicine barcode",
+                                icon: "barcode.viewfinder",
+                                iconColor: .blue,
+                                action: {
+                                    showScannerSheet = true
+                                }
+                            )
+                            
+                            // Track button
+                            DashboardButton(
+                                title: "Track",
+                                description: "Track medication adherence",
+                                icon: "list.bullet.clipboard",
+                                iconColor: .green,
+                                action: {
+                                    showTrackingView = true
+                                }
+                            )
+                            
+                            // Report button
+                            DashboardButton(
+                                title: "Report",
+                                description: "View medication reports",
+                                icon: "chart.bar.doc.horizontal",
+                                iconColor: .orange,
+                                action: {
+                                    inDevelopmentFeature = "Medication Reports"
+                                    showFeatureInDevelopment = true
+                                }
+                            )
+                            
+                            // Refill button
+                            DashboardButton(
+                                title: "Refill",
+                                description: "Manage medication refills",
+                                icon: "arrow.clockwise.circle",
+                                iconColor: .purple,
+                                action: {
+                                    inDevelopmentFeature = "Medication Refills"
+                                    showFeatureInDevelopment = true
+                                }
+                            )
+                        }
+                        .padding(.horizontal)
+                        
+                        Divider()
+                            .padding(.vertical, 10)
+                        
+                        // Medicine list section
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack {
+                                Text("My Medicines")
+                                    .font(.headline)
+                                
+                                Spacer()
+                                
+                                NavigationLink(destination: MedicineListView()) {
+                                    Text("See All")
+                                        .font(.subheadline)
+                                        .foregroundColor(AppColors.primaryFallback())
+                                }
+                            }
+                            .padding(.horizontal)
+                            
+                            // Show recent medicines
+                            if medicineStore.medicines.isEmpty {
+                                EmptyMedicinesView()
+                            } else {
+                                RecentMedicinesView(medicines: Array(medicineStore.medicines.prefix(3)))
+                            }
+                        }
+                    }
+                    .padding(.vertical)
+                }
+                
+                Spacer()
+            }
+            .navigationBarHidden(true)
+            .sheet(isPresented: $showScannerSheet) {
+                scannerSheet
+            }
+            .sheet(isPresented: $showAddMedicineForm) {
+                MedicineFormView(isPresented: $showAddMedicineForm)
+            }
+            .sheet(isPresented: $showTrackingView) {
+                AdherenceTrackingView()
+            }
+            .alert(isPresented: $showFeatureInDevelopment) {
+                Alert(
+                    title: Text("Coming Soon"),
+                    message: Text("\(inDevelopmentFeature) feature is currently under development and will be available in a future update."),
+                    dismissButton: .default(Text("OK"))
+                )
+            }
+        }
+        .accentColor(AppColors.primaryFallback())
+        .onAppear {
+            // Load medicines when app appears
+            medicineStore.loadMedicines()
         }
     }
 }

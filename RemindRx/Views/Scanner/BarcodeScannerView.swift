@@ -3,10 +3,12 @@ import AVFoundation
 
 struct BarcodeScannerView: UIViewControllerRepresentable {
     var onScanCompletion: (Result<String, Error>) -> Void
+    var onCancel: () -> Void // Add cancel callback
     
     func makeUIViewController(context: Context) -> BarcodeScannerViewController {
         let viewController = BarcodeScannerViewController()
         viewController.delegate = context.coordinator
+        viewController.cancelAction = onCancel // Pass cancel action to view controller
         return viewController
     }
     
@@ -32,16 +34,22 @@ struct BarcodeScannerView: UIViewControllerRepresentable {
         func didFailWithError(error: Error) {
             parent.onScanCompletion(.failure(error))
         }
+        
+        func didTapCancel() {
+            parent.onCancel()
+        }
     }
 }
 
 protocol BarcodeScannerViewControllerDelegate: AnyObject {
     func didScanBarcode(barcode: String)
     func didFailWithError(error: Error)
+    func didTapCancel() // Add cancel delegate method
 }
 
 class BarcodeScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsDelegate {
     weak var delegate: BarcodeScannerViewControllerDelegate?
+    var cancelAction: (() -> Void)? // Add cancel action property
     
     enum ScannerError: Error {
         case cameraSetupFailed
@@ -51,10 +59,12 @@ class BarcodeScannerViewController: UIViewController, AVCaptureMetadataOutputObj
     private var captureSession: AVCaptureSession!
     private var previewLayer: AVCaptureVideoPreviewLayer!
     private var overlayView: ScannerOverlayUIView!
+    private var cancelButton: UIButton! // Add cancel button
     
     override func viewDidLoad() {
         super.viewDidLoad()
         setupCaptureSession()
+        setupCancelButton() // Add cancel button setup
     }
     
     override func viewDidAppear(_ animated: Bool) {
@@ -76,6 +86,7 @@ class BarcodeScannerViewController: UIViewController, AVCaptureMetadataOutputObj
     }
     
     private func setupCaptureSession() {
+        // Existing setup code...
         captureSession = AVCaptureSession()
         captureSession.sessionPreset = .high
         
@@ -137,6 +148,40 @@ class BarcodeScannerViewController: UIViewController, AVCaptureMetadataOutputObj
     private func setupOverlay() {
         overlayView = ScannerOverlayUIView(frame: view.bounds)
         view.addSubview(overlayView)
+    }
+    
+    // Add method to set up cancel button
+    private func setupCancelButton() {
+        cancelButton = UIButton(type: .system)
+        cancelButton.setTitle("Cancel", for: .normal)
+        cancelButton.titleLabel?.font = UIFont.systemFont(ofSize: 18, weight: .medium)
+        cancelButton.setTitleColor(.white, for: .normal)
+        cancelButton.backgroundColor = UIColor.black.withAlphaComponent(0.6)
+        cancelButton.layer.cornerRadius = 8
+        
+        cancelButton.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(cancelButton)
+        
+        NSLayoutConstraint.activate([
+            cancelButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            cancelButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -20),
+            cancelButton.widthAnchor.constraint(equalToConstant: 120),
+            cancelButton.heightAnchor.constraint(equalToConstant: 44)
+        ])
+        
+        cancelButton.addTarget(self, action: #selector(cancelButtonTapped), for: .touchUpInside)
+    }
+    
+    @objc private func cancelButtonTapped() {
+        if captureSession?.isRunning == true {
+            captureSession.stopRunning()
+        }
+        
+        // Notify delegate
+        delegate?.didTapCancel()
+        
+        // Also call the cancel action if provided
+        cancelAction?()
     }
     
     private func handleSetupError(_ error: Error) {

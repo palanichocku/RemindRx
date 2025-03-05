@@ -6,6 +6,16 @@ struct MedicineDetailView: View {
     
     let medicine: Medicine
     @State private var showingDeleteConfirmation = false
+    @State private var isEditingExpiry = false
+    @State private var editedExpirationDate: Date
+    @State private var editedAlertInterval: Medicine.AlertInterval
+    
+    init(medicine: Medicine) {
+        self.medicine = medicine
+        // Initialize state variables with medicine values
+        _editedExpirationDate = State(initialValue: medicine.expirationDate)
+        _editedAlertInterval = State(initialValue: medicine.alertInterval)
+    }
     
     var body: some View {
         ScrollView {
@@ -48,58 +58,119 @@ struct MedicineDetailView: View {
                 
                 Divider()
                 
-                // Expiration details
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Expiration")
-                        .font(.headline)
-                    
+                // Expiration and Alert section - now with edit button
+                VStack(alignment: .leading, spacing: 16) {
                     HStack {
-                        Image(systemName: isExpired ? "calendar.badge.exclamationmark" : "calendar")
-                            .foregroundColor(isExpired ? .red : .primary)
+                        Text(isEditingExpiry ? "Edit Expiration & Reminder" : "Expiration & Reminder")
+                            .font(.headline)
                         
-                        Text(formatDate(medicine.expirationDate))
-                            .foregroundColor(isExpired ? .red : .primary)
-                            .fontWeight(isExpired ? .bold : .regular)
+                        Spacer()
                         
-                        if isExpired {
-                            Text("EXPIRED")
-                                .font(.caption)
-                                .fontWeight(.bold)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 3)
-                                .background(Color.red)
-                                .foregroundColor(.white)
-                                .clipShape(Capsule())
-                        } else if isExpiringSoon {
-                            Text("EXPIRING SOON")
-                                .font(.caption)
-                                .fontWeight(.bold)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 3)
-                                .background(Color.yellow)
-                                .foregroundColor(.black)
-                                .clipShape(Capsule())
+                        Button(action: {
+                            isEditingExpiry.toggle()
+                        }) {
+                            Text(isEditingExpiry ? "Done" : "Edit")
+                                .foregroundColor(AppColors.primaryFallback())
+                        }
+                    }
+                    
+                    if isEditingExpiry {
+                        // Editable version - both expiration and alert
+                        VStack(alignment: .leading, spacing: 12) {
+                            // Expiration date picker
+                            DatePicker("Expiration Date", selection: $editedExpirationDate, displayedComponents: .date)
+                                .datePickerStyle(DefaultDatePickerStyle())
+                                .padding(.vertical, 4)
+                            
+                            // Alert interval picker
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Alert Interval")
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                                
+                                Picker("Alert", selection: $editedAlertInterval) {
+                                    ForEach(Medicine.AlertInterval.allCases, id: \.self) { interval in
+                                        Text(interval.rawValue).tag(interval)
+                                    }
+                                }
+                                .pickerStyle(SegmentedPickerStyle())
+                            }
+                            
+                            // Save button
+                            Button(action: saveChanges) {
+                                Text("Save Changes")
+                                    .font(.headline)
+                                    .foregroundColor(.white)
+                                    .padding(.vertical, 10)
+                                    .frame(maxWidth: .infinity)
+                                    .background(AppColors.primaryFallback())
+                                    .cornerRadius(10)
+                            }
+                            .padding(.top, 8)
+                        }
+                    } else {
+                        // Display-only version
+                        VStack(alignment: .leading, spacing: 12) {
+                            // Expiration date display
+                            HStack {
+                                Image(systemName: isExpired ? "calendar.badge.exclamationmark" : "calendar")
+                                    .foregroundColor(isExpired ? .red : .primary)
+                                
+                                Text("Expires: \(formatDate(medicine.expirationDate))")
+                                    .foregroundColor(isExpired ? .red : .primary)
+                                    .fontWeight(isExpired ? .bold : .regular)
+                                
+                                if isExpired {
+                                    Text("EXPIRED")
+                                        .font(.caption)
+                                        .fontWeight(.bold)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 3)
+                                        .background(Color.red)
+                                        .foregroundColor(.white)
+                                        .clipShape(Capsule())
+                                } else if isExpiringSoon {
+                                    Text("EXPIRING SOON")
+                                        .font(.caption)
+                                        .fontWeight(.bold)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 3)
+                                        .background(Color.yellow)
+                                        .foregroundColor(.black)
+                                        .clipShape(Capsule())
+                                }
+                            }
+                            
+                            // Alert interval display
+                            HStack {
+                                Image(systemName: "bell")
+                                Text("Alert: \(medicine.alertInterval.rawValue) before expiration")
+                            }
+                            .foregroundColor(.secondary)
                         }
                     }
                 }
                 
                 Divider()
                 
-                // Alert settings
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Reminder")
-                        .font(.headline)
-                    
-                    HStack {
-                        Image(systemName: "bell")
-                        Text("Alert \(medicine.alertInterval.rawValue) expiration")
+                // Source information (new)
+                if medicine.source != nil {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Source")
+                            .font(.headline)
+                        
+                        HStack {
+                            Image(systemName: "network")
+                            Text(medicine.source ?? "Unknown")
+                                .foregroundColor(.secondary)
+                        }
                     }
+                    
+                    Divider()
                 }
                 
+                // Barcode information
                 if medicine.barcode != nil {
-                    Divider()
-                    
-                    // Barcode information
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Barcode")
                             .font(.headline)
@@ -108,9 +179,9 @@ struct MedicineDetailView: View {
                             .font(.system(.body, design: .monospaced))
                             .foregroundColor(.secondary)
                     }
+                    
+                    Divider()
                 }
-                
-                Divider()
                 
                 // Added date
                 VStack(alignment: .leading, spacing: 8) {
@@ -164,5 +235,18 @@ struct MedicineDetailView: View {
         formatter.dateStyle = .medium
         formatter.timeStyle = .none
         return formatter.string(from: date)
+    }
+    
+    func saveChanges() {
+        // Create updated medicine with edited values
+        var updatedMedicine = medicine
+        updatedMedicine.expirationDate = editedExpirationDate
+        updatedMedicine.alertInterval = editedAlertInterval
+        
+        // Save the updated medicine
+        medicineStore.save(updatedMedicine)
+        
+        // Exit edit mode
+        isEditingExpiry = false
     }
 }

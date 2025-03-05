@@ -41,28 +41,24 @@ class MedicineStore: ObservableObject {
     }
     
     func delete(_ medicine: Medicine) {
-        // Remove from array
+        // First notify any AdherenceTrackingStore instances
+        NotificationCenter.default.post(name: .medicineDeleted, object: medicine.id)
+        
+        // Then perform the original deletion
         medicines.removeAll { $0.id == medicine.id }
-        
-        // Remove from Core Data
         coreDataManager.deleteMedicine(medicine)
-        
-        // Cancel any notifications
         notificationManager.removeNotifications(for: medicine)
     }
     
     func deleteAll() {
-        // Remove all from array
+        // First notify any AdherenceTrackingStore instances
+        NotificationCenter.default.post(name: .allMedicinesDeleted, object: nil)
+        
+        // Then perform the original deletion
         medicines.removeAll()
-        
-        // Remove all from Core Data
         coreDataManager.deleteAllMedicines()
-        
-        // Cancel all notifications
         UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
     }
-    
-    // MARK: - Barcode Operations
     
     func lookupDrug(barcode: String, completion: @escaping (Result<Medicine, Error>) -> Void) {
         isLoading = true
@@ -82,7 +78,8 @@ class MedicineStore: ObservableObject {
                         type: drugInfo.isPrescription ? .prescription : .otc,
                         alertInterval: .week, // Default alert interval
                         expirationDate: Date().addingTimeInterval(60*60*24*365), // Default to 1 year from now
-                        barcode: barcode
+                        barcode: barcode,
+                        source: drugInfo.source
                     )
                     completion(.success(medicine))
                     
@@ -93,4 +90,8 @@ class MedicineStore: ObservableObject {
             }
         }
     }
+}
+extension Notification.Name {
+    static let medicineDeleted = Notification.Name("com.remindrx.medicineDeleted")
+    static let allMedicinesDeleted = Notification.Name("com.remindrx.allMedicinesDeleted")
 }

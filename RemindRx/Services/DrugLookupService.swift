@@ -54,6 +54,7 @@ class DrugLookupService {
         let manufacturer: String
         let isPrescription: Bool
         let ndcCode: String?
+        let source: String? // Add source field
         
         // Default empty drug info
         static let empty = DrugInfo(
@@ -61,7 +62,8 @@ class DrugLookupService {
             description: "",
             manufacturer: "",
             isPrescription: false,
-            ndcCode: nil
+            ndcCode: nil,
+            source: nil
         )
     }
     
@@ -217,7 +219,8 @@ class DrugLookupService {
                         description: descriptionString,
                         manufacturer: manufacturer,
                         isPrescription: isPrescription,
-                        ndcCode: possibleNDC
+                        ndcCode: possibleNDC,
+                        source: "OpenFDA"
                     )
                     
                     completion(.success(drugInfo))
@@ -361,7 +364,8 @@ class DrugLookupService {
                         description: description,
                         manufacturer: manufacturer,
                         isPrescription: isPrescription,
-                        ndcCode: nil
+                        ndcCode: nil,
+                        source: "RxNav"
                     )
                     
                     completion(.success(drugInfo))
@@ -430,7 +434,8 @@ class DrugLookupService {
                             description: description,
                             manufacturer: brand,
                             isPrescription: false,
-                            ndcCode: nil
+                            ndcCode: nil,
+                            source: "UPCItemDb"
                         )
                         
                         completion(.success(drugInfo))
@@ -502,7 +507,8 @@ class DrugLookupService {
                         description: description.isEmpty ? "No description available" : description,
                         manufacturer: manufacturer,
                         isPrescription: isPrescription,
-                        ndcCode: possibleNDC
+                        ndcCode: possibleNDC,
+                        source: "NDCList"
                     )
                     
                     completion(.success(drugInfo))

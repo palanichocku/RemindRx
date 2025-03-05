@@ -1,7 +1,8 @@
 import CoreData
 import Foundation
 
-struct Medicine: Identifiable, Codable {
+// Make Medicine conform to Equatable and Hashable to fix comparison issues
+struct Medicine: Identifiable, Codable, Equatable, Hashable {
     var id = UUID()
     var name: String
     var description: String
@@ -11,6 +12,7 @@ struct Medicine: Identifiable, Codable {
     var expirationDate: Date
     var dateAdded: Date = Date()
     var barcode: String?
+    var source: String?
     
     enum MedicineType: String, Codable, CaseIterable {
         case prescription = "Prescription"
@@ -33,5 +35,15 @@ struct Medicine: Identifiable, Codable {
             case .ninetyDays: return 90
             }
         }
+    }
+    
+    // Equatable implementation
+    static func == (lhs: Medicine, rhs: Medicine) -> Bool {
+        return lhs.id == rhs.id
+    }
+    
+    // Hashable implementation
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
     }
 }

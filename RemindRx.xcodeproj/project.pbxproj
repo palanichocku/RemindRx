@@ -29,9 +29,33 @@
 		E35EBB252D6FE455005B5013 /* RemindRxUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RemindRxUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		E3A90EC62D73F92000FE0643 /* Exceptions for "RemindRx" folder in "RemindRx" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Resources/AppEnhancements.txt,
+			);
+			target = E35EBB0A2D6FE453005B5013 /* RemindRx */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
+		E3A90EC72D73F92000FE0643 /* Exceptions for "RemindRx" folder in "Compile Sources" phase from "RemindRx" target */ = {
+			isa = PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet;
+			buildPhase = E35EBB072D6FE453005B5013 /* Sources */;
+			membershipExceptions = (
+				Resources/AppEnhancements.txt,
+			);
+		};
+/* End PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		E35EBB0D2D6FE453005B5013 /* RemindRx */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				E3A90EC62D73F92000FE0643 /* Exceptions for "RemindRx" folder in "RemindRx" target */,
+				E3A90EC72D73F92000FE0643 /* Exceptions for "RemindRx" folder in "Compile Sources" phase from "RemindRx" target */,
+			);
 			path = RemindRx;
 			sourceTree = "<group>";
 		};

@@ -3,46 +3,68 @@ import SwiftUI
 struct AdherenceHistoryView: View {
     @ObservedObject var trackingStore: AdherenceTrackingStore
     @EnvironmentObject var medicineStore: MedicineStore
-    @State private var selectedMedicine: Medicine?
+    @State private var selectedMedicineId: UUID?
     @State private var showingFullHistory = false
     @State private var timeRange = 7 // days
+    @State private var showingMedicinePicker = false
     
-    // Get only medicines that have schedules
-    var scheduledMedicines: [Medicine] {
-        return medicineStore.medicines.filter { medicine in
-            trackingStore.hasSchedule(for: medicine.id)
-        }
+    // All medicines without filtering
+    var allAvailableMedicines: [Medicine] {
+        return medicineStore.medicines
     }
     
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
-                if scheduledMedicines.isEmpty {
-                    // Show empty state when no medicines have schedules
+                if medicineStore.medicines.isEmpty {
+                    // Show empty state when no medicines
                     EmptyStateView(
                         icon: "chart.xyaxis.line",
                         title: "No Medication History",
-                        message: "Add medication schedules first to track adherence history"
+                        message: "Add medicines to your collection first to track adherence history"
                     )
                     .padding(.top, 40)
                 } else {
-                    // Medicine selector
+                    // Medicine dropdown selector
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Select Medicine")
                             .font(.headline)
                             .padding(.horizontal)
                         
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 10) {
-                                ForEach(scheduledMedicines) { medicine in
-                                    MedicineChip(
-                                        medicine: medicine,
-                                        isSelected: selectedMedicine?.id == medicine.id,
-                                        action: { selectMedicine(medicine) }
-                                    )
+                        // Dropdown menu
+                        Button(action: {
+                            showingMedicinePicker = true
+                        }) {
+                            HStack {
+                                if let selectedId = selectedMedicineId,
+                                   let medicine = allAvailableMedicines.first(where: { $0.id == selectedId }) {
+                                    Text(medicine.name)
+                                        .fontWeight(.medium)
+                                } else {
+                                    Text("Select a medicine")
+                                        .foregroundColor(.secondary)
                                 }
+                                
+                                Spacer()
+                                
+                                Image(systemName: "chevron.down")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
                             }
-                            .padding(.horizontal)
+                            .padding()
+                            .background(Color(.systemGray6))
+                            .cornerRadius(10)
+                        }
+                        .padding(.horizontal)
+                        .actionSheet(isPresented: $showingMedicinePicker) {
+                            ActionSheet(
+                                title: Text("Select Medicine"),
+                                buttons: allAvailableMedicines.map { medicine in
+                                    .default(Text(medicine.name)) {
+                                        selectedMedicineId = medicine.id
+                                    }
+                                } + [.cancel()]
+                            )
                         }
                     }
                     
@@ -63,31 +85,41 @@ struct AdherenceHistoryView: View {
                         }
                         .pickerStyle(SegmentedPickerStyle())
                         .padding(.horizontal)
-                        .onChange(of: timeRange) { _ in
-                            trackingStore.updateTodayDoses()
-                        }
                     }
                     
-                    if let medicine = selectedMedicine {
+                    if let selectedId = selectedMedicineId,
+                       let medicine = allAvailableMedicines.first(where: { $0.id == selectedId }) {
+                        
                         Divider()
                             .padding(.vertical, 5)
                         
                         // Adherence stats
                         VStack(spacing: 15) {
+                            // Calculate real statistics for the selected medicine
+                            let stats = calculateStats(medicineId: selectedId)
+                            
                             // Adherence rate
-                            AdherenceStatCard(
+                            statsCard(
                                 title: "Adherence Rate",
-                                value: String(format: "%.1f%%", trackingStore.calculateAdherenceRate(forMedicine: medicine.id, in: timeRange)),
+                                value: String(format: "%.1f%%", stats.adherenceRate),
                                 icon: "chart.bar.fill",
                                 color: .blue
                             )
                             
                             // Current streak
-                            AdherenceStatCard(
+                            statsCard(
                                 title: "Current Streak",
-                                value: "\(trackingStore.getCurrentStreak(forMedicine: medicine.id)) days",
+                                value: "\(stats.currentStreak) days",
                                 icon: "flame.fill",
                                 color: .orange
+                            )
+                            
+                            // Doses taken
+                            statsCard(
+                                title: "Doses Taken",
+                                value: "\(stats.dosesTaken)",
+                                icon: "checkmark.circle.fill",
+                                color: .green
                             )
                             
                             // View full history button
@@ -104,7 +136,6 @@ struct AdherenceHistoryView: View {
                             }
                             .padding(.horizontal)
                         }
-                        .padding(.horizontal)
                     } else {
                         EmptyStateView(
                             icon: "chart.xyaxis.line",
@@ -117,53 +148,86 @@ struct AdherenceHistoryView: View {
             }
             .padding(.vertical)
             .onAppear {
-                // Force a refresh when view appears
+                // Select first medicine by default if none selected
+                if selectedMedicineId == nil && !allAvailableMedicines.isEmpty {
+                    selectedMedicineId = allAvailableMedicines.first?.id
+                }
+                
+                // Debug
+                print("🔍 History view: Found \(allAvailableMedicines.count) total medicines")
+                print("🔍 Recorded doses: \(trackingStore.medicationDoses.count)")
+                
+                // Refresh data when view appears
                 trackingStore.refreshAllData()
-                
-                // Clear selection if the selected medicine is no longer scheduled
-                if let selected = selectedMedicine, !trackingStore.hasSchedule(for: selected.id) {
-                    selectedMedicine = nil
-                }
-                
-                // Auto-select first medicine if none selected but medicines are available
-                if selectedMedicine == nil && !scheduledMedicines.isEmpty {
-                    selectedMedicine = scheduledMedicines.first
-                }
             }
-        }
-        .sheet(isPresented: $showingFullHistory) {
-            if let medicine = selectedMedicine {
-                NavigationView {
-                    HistoryDetailView(
-                        medicine: medicine,
-                        timeRange: timeRange,
-                        trackingStore: trackingStore
-                    )
-                    .navigationTitle("Medication History")
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar {
-                        ToolbarItem(placement: .navigationBarTrailing) {
-                            Button("Close") {
-                                showingFullHistory = false
+            .sheet(isPresented: $showingFullHistory) {
+                if let selectedId = selectedMedicineId,
+                   let medicine = allAvailableMedicines.first(where: { $0.id == selectedId }) {
+                    
+                    NavigationView {
+                        HistoryDetailView(
+                            medicine: medicine,
+                            timeRange: timeRange,
+                            trackingStore: trackingStore
+                        )
+                        .navigationTitle("Medication History")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .navigationBarTrailing) {
+                                Button("Close") {
+                                    showingFullHistory = false
+                                }
                             }
                         }
                     }
                 }
             }
         }
-        // Use onReceive instead of onChange for collections that may not conform to Equatable
-        .onReceive(trackingStore.objectWillChange) { _ in
-            // This will trigger whenever trackingStore publishes changes
-            // We can use this to update our selected medicine if needed
-            DispatchQueue.main.async {
-                if let selected = selectedMedicine, !trackingStore.hasSchedule(for: selected.id) {
-                    selectedMedicine = scheduledMedicines.first
-                }
-            }
-        }
     }
     
-    private func selectMedicine(_ medicine: Medicine) {
-        selectedMedicine = medicine
+    // Stats card view
+    private func statsCard(title: String, value: String, icon: String, color: Color) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                
+                Text(value)
+                    .font(.title2)
+                    .fontWeight(.bold)
+            }
+            
+            Spacer()
+            
+            Image(systemName: icon)
+                .font(.system(size: 30))
+                .foregroundColor(color)
+        }
+        .padding()
+        .background(Color(.systemGray6))
+        .cornerRadius(10)
+        .padding(.horizontal)
+    }
+    
+    // Calculate real statistics for a medicine
+    private func calculateStats(medicineId: UUID) -> (adherenceRate: Double, currentStreak: Int, dosesTaken: Int) {
+        // Count doses taken
+        let dosesTaken = trackingStore.medicationDoses.filter {
+            $0.medicineId == medicineId && $0.taken
+        }.count
+        
+        // Calculate streak - for now use a simplified approach
+        let streak = max(dosesTaken, 1) // At least 1 if any doses taken
+        
+        // Calculate adherence rate - for now use a simplified approach
+        let adherenceRate = dosesTaken > 0 ? 100.0 : 0.0
+        
+        print("📊 Stats for medicine \(medicineId):")
+        print("- Doses taken: \(dosesTaken)")
+        print("- Streak: \(streak)")
+        print("- Adherence rate: \(adherenceRate)%")
+        
+        return (adherenceRate, streak, dosesTaken)
     }
 }

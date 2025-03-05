@@ -5,26 +5,34 @@ struct AdherenceTrackingView: View {
     @Environment(\.presentationMode) var presentationMode
     @Environment(\.managedObjectContext) var viewContext
     @EnvironmentObject var medicineStore: MedicineStore
+    
+    // Create a StateObject for the tracking store that won't get recreated
     @StateObject private var trackingStore: AdherenceTrackingStore
     
+    // UI state
     @State private var selectedTab = 0
     @State private var previousTab = 0
-    @State private var showingAddSchedule = false
-    @State private var selectedMedicine: Medicine?
     @State private var isLoading = false
-    @State private var showDuplicateAlert = false
     
-    // For the simplified flow
-    @State private var showingSimpleScheduleCreator = false
+    // Sheet state
+    @State private var showingAllInOneSchedulingView = false
+    @State private var showEmptyMedicinesAlert = false
     
-    // Add notification observers
+    // Observers
     @State private var medicineDeletedObserver: AnyCancellable?
     @State private var allMedicinesDeletedObserver: AnyCancellable?
     
+    // MARK: - Initialization
+    
     init() {
+        print("📱 Initializing AdherenceTrackingView")
         let context = PersistentContainer.shared.viewContext
+        
+        // Create tracking store with context
         _trackingStore = StateObject(wrappedValue: AdherenceTrackingStore(context: context))
     }
+    
+    // MARK: - Body
     
     var body: some View {
         NavigationView {
@@ -55,7 +63,7 @@ struct AdherenceTrackingView: View {
                             
                             // Always do a full refresh when changing tabs
                             isLoading = true
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                                 trackingStore.refreshAllData()
                                 isLoading = false
                             }
@@ -82,57 +90,51 @@ struct AdherenceTrackingView: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     if selectedTab == 1 {
                         Button(action: {
-                            showingAddSchedule = true
+                            handleAddButtonPressed()
                         }) {
                             Image(systemName: "plus.circle")
                         }
                     }
                 }
             }
-            .sheet(isPresented: $showingAddSchedule) {
-                // Show medicine picker
-                MedicinePickerView(
-                    selectedMedicine: $selectedMedicine,
-                    medicines: medicineStore.medicines,
-                    trackingStore: trackingStore,
-                    showDuplicateAlert: $showDuplicateAlert
-                )
-                .environmentObject(medicineStore)
-                .onDisappear {
-                    if let medicine = selectedMedicine {
-                        handleMedicineSelection(medicine)
-                        selectedMedicine = nil
+            .sheet(isPresented: $showingAllInOneSchedulingView, onDismiss: {
+                // After scheduling is done, refresh data and switch to Today tab
+                isLoading = true
+                
+                // Force reload data after slight delay
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    trackingStore.refreshAllData()
+                    
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        // Switch to Today tab
+                        selectedTab = 0
+                        isLoading = false
                     }
                 }
+            }) {
+                // Show our new all-in-one scheduling view
+                AllInOneSchedulingView(trackingStore: trackingStore)
+                    .environmentObject(medicineStore)
             }
-            .sheet(isPresented: $showingSimpleScheduleCreator) {
-                // Use the new SimpleScheduleCreationView instead of NewScheduleEditorView
-                if let medicine = selectedMedicine {
-                    SimpleScheduleCreationView(
-                        trackingStore: trackingStore,
-                        medicine: medicine,
-                        onComplete: {
-                            // Switch to Today tab
-                            selectedTab = 0
-                        }
-                    )
-                }
-            }
-            .alert("Already Scheduled", isPresented: $showDuplicateAlert) {
+            .alert("No Medicines Added", isPresented: $showEmptyMedicinesAlert) {
                 Button("OK", role: .cancel) {}
             } message: {
-                Text("This medicine is already in your schedule. You can edit its existing schedule from the Schedule tab.")
+                Text("Please add medicines to your collection before creating medication schedules.")
             }
             .onAppear {
+                print("📱 AdherenceTrackingView appeared")
                 isLoading = true
                 setupNotificationObservers()
+                
+                // Force load medicines
+                medicineStore.loadMedicines()
                 
                 // Clean up any schedules for medicines that no longer exist
                 trackingStore.cleanupDeletedMedicines()
                 
                 // Load data with a brief delay to ensure view is ready
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    trackingStore.loadData()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    trackingStore.refreshAllData()
                     isLoading = false
                 }
             }
@@ -146,6 +148,8 @@ struct AdherenceTrackingView: View {
             }
         }
     }
+    
+    // MARK: - Helper Methods
     
     private func setupNotificationObservers() {
         // Observer for when a medicine is deleted
@@ -171,20 +175,15 @@ struct AdherenceTrackingView: View {
             }
     }
     
-    // Handle medicine selection with simplified flow
-    private func handleMedicineSelection(_ medicine: Medicine) {
-        // Check if this medicine already has a schedule
-        if trackingStore.hasSchedule(for: medicine.id) {
-            showDuplicateAlert = true
-            return
-        }
-        
-        // Keep the selected medicine
-        self.selectedMedicine = medicine
-        
-        // Show the simplified schedule creator directly
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            showingSimpleScheduleCreator = true
+    private func handleAddButtonPressed() {
+        if medicineStore.medicines.isEmpty {
+            // No medicines available
+            showEmptyMedicinesAlert = true
+        } else {
+            // Show the all-in-one scheduling view
+            showingAllInOneSchedulingView = true
         }
     }
+    
+    
 }

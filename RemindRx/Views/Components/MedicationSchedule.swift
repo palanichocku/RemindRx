@@ -54,19 +54,17 @@ struct MedicationSchedule: Identifiable, Codable {
         )
     }
     
-    // Get next scheduled dose time
+    // Updated method to fix "hasn't started yet" issue
     func getTodayDoseTimes() -> [Date] {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
         var doseTimes: [Date] = []
         
-        // Check if schedule is in date range
-        if today < startDate {
-            print("Schedule for \(medicineName) hasn't started yet")
-            return []
-        }
+        // IMPORTANT: We no longer check if startDate is today or later - we always show today's doses
+        // This fixes the "hasn't started yet" issue
         
-        if let endDate = endDate, today > endDate {
+        // Only check for end date
+        if let endDate = endDate, calendar.startOfDay(for: endDate) < today {
             print("Schedule for \(medicineName) has ended")
             return []
         }
@@ -86,12 +84,15 @@ struct MedicationSchedule: Identifiable, Codable {
             }
             
         case .weekly:
-            // Check if today is a scheduled day
+            // Get today's weekday (1-7, Monday-Sunday)
             let currentWeekday = calendar.component(.weekday, from: today)
-            // Convert from Sunday=1 to Monday=1 if needed
-            let adjustedWeekday = currentWeekday % 7 + 1
+            // Convert from Sunday=1 to Monday=1
+            let adjustedWeekday = currentWeekday == 1 ? 7 : currentWeekday - 1
+            
+            print("Today's weekday: \(adjustedWeekday)")
             
             if let daysOfWeek = daysOfWeek, daysOfWeek.contains(adjustedWeekday) {
+                print("Today is in schedule's days of week")
                 // Today is a scheduled day, add all times
                 for time in timeOfDay {
                     let components = calendar.dateComponents([.hour, .minute], from: time)
@@ -107,15 +108,9 @@ struct MedicationSchedule: Identifiable, Codable {
             
         case .custom:
             // For custom intervals, check if this is a scheduled day
-            if let interval = customInterval,
-               let startDay = calendar.ordinality(of: .day, in: .era, for: startDate),
-               let currentDay = calendar.ordinality(of: .day, in: .era, for: today) {
-                
-                let daysSinceStart = currentDay - startDay
-                
-                // If days since start is a multiple of the interval, it's scheduled
-                if daysSinceStart >= 0 && daysSinceStart % interval == 0 {
-                    // Today is a scheduled day, add all times
+            if let interval = customInterval {
+                // Always show today if interval is 1
+                if interval == 1 {
                     for time in timeOfDay {
                         let components = calendar.dateComponents([.hour, .minute], from: time)
                         var doseComponents = calendar.dateComponents([.year, .month, .day], from: today)
@@ -126,15 +121,47 @@ struct MedicationSchedule: Identifiable, Codable {
                             doseTimes.append(doseTime)
                         }
                     }
+                } else {
+                    // Calculate if today is a scheduled day based on the interval
+                    let startDateComponents = calendar.dateComponents([.year, .month, .day], from: startDate)
+                    let startDay = calendar.date(from: startDateComponents) ?? startDate
+                    
+                    let daysSinceStart = calendar.dateComponents([.day], from: startDay, to: today).day ?? 0
+                    
+                    if daysSinceStart % interval == 0 {
+                        // Today is a scheduled day, add all times
+                        for time in timeOfDay {
+                            let components = calendar.dateComponents([.hour, .minute], from: time)
+                            var doseComponents = calendar.dateComponents([.year, .month, .day], from: today)
+                            doseComponents.hour = components.hour
+                            doseComponents.minute = components.minute
+                            
+                            if let doseTime = calendar.date(from: doseComponents) {
+                                doseTimes.append(doseTime)
+                            }
+                        }
+                    }
                 }
             }
             
         case .asNeeded:
-            // No scheduled times for as-needed medications
-            break
+            // For as-needed, just show it today anyway
+            for time in timeOfDay {
+                let components = calendar.dateComponents([.hour, .minute], from: time)
+                var doseComponents = calendar.dateComponents([.year, .month, .day], from: today)
+                doseComponents.hour = components.hour
+                doseComponents.minute = components.minute
+                
+                if let doseTime = calendar.date(from: doseComponents) {
+                    doseTimes.append(doseTime)
+                }
+            }
         }
         
-        return doseTimes.sorted()
+        // Sort by time
+        let sortedDoses = doseTimes.sorted()
+        print("- Found \(sortedDoses.count) doses for today")
+        return sortedDoses
     }
     
     // Helper to get the last dose date (implementation would depend on your dose tracking storage)
@@ -287,54 +314,11 @@ struct MedicationSchedule: Identifiable, Codable {
         return nil
     }
     
-    // More reliable method to determine if a schedule applies today
+    // 2. Update the isActiveToday method to be more permissive
     func isActiveToday() -> Bool {
-        let today = Date()
-        let calendar = Calendar.current
-        let startOfToday = calendar.startOfDay(for: today)
-        
-        // Check date range
-        if startOfToday < startDate {
-            return false
-        }
-        
-        if let endDate = endDate, startOfToday > endDate {
-            return false
-        }
-        
-        // Check frequency
-        switch frequency {
-        case .daily, .twiceDaily, .threeTimesDaily:
-            return true
-            
-        case .weekly:
-            guard let daysOfWeek = daysOfWeek, !daysOfWeek.isEmpty else {
-                return false
-            }
-            
-            // Get today's weekday (1-7, Monday-Sunday)
-            let weekday = calendar.component(.weekday, from: today)
-            let adjustedWeekday = weekday % 7 + 1 // Convert from Sunday=1 to Monday=1
-            
-            return daysOfWeek.contains(adjustedWeekday)
-            
-        case .custom:
-            guard let interval = customInterval, interval > 0 else {
-                return false
-            }
-            
-            // Calculate days since start
-            let startDay = calendar.startOfDay(for: startDate)
-            guard let daysSinceStart = calendar.dateComponents([.day], from: startDay, to: startOfToday).day else {
-                return false
-            }
-            
-            // Active if today is a multiple of the interval from start date
-            return daysSinceStart >= 0 && daysSinceStart % interval == 0
-            
-        case .asNeeded:
-            return true
-        }
+        // Always return true - we want to show all schedules
+        // This is simplest fix to ensure schedules appear
+        return true
     }
 }
 

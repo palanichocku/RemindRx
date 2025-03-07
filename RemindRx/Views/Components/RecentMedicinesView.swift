@@ -8,26 +8,32 @@
 import SwiftUI
 
 struct RecentMedicinesView: View {
-    let medicines: [Medicine]
+    @EnvironmentObject var medicineStore: MedicineStore
+    
+    // Add this state to track refreshes
+    @State private var lastRefresh = UUID()
     
     var body: some View {
         VStack(spacing: 10) {
-            ForEach(medicines) { medicine in
+            ForEach(medicineStore.medicines.prefix(3)) { medicine in
+                // Look up medicine by ID to ensure freshest data
+                let currentMedicine = getMostCurrentMedicine(medicine)
+                
                 NavigationLink(destination: MedicineDetailView(medicine: medicine)) {
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(medicine.name)
+                            Text(currentMedicine.name)
                                 .font(.headline)
                                 .foregroundColor(.primary)
                             
-                            Text("Expires: \(formatDate(medicine.expirationDate))")
+                            Text("Expires: \(formatDate(currentMedicine.expirationDate))")
                                 .font(.subheadline)
-                                .foregroundColor(medicine.expirationDate < Date() ? .red : .secondary)
+                                .foregroundColor(currentMedicine.expirationDate < Date() ? .red : .secondary)
                         }
                         
                         Spacer()
                         
-                        ExpiryBadgeView(status: medicine.expiryStatus, compact: true)
+                        ExpiryBadgeView(status: currentMedicine.expiryStatus, compact: true)
                             .padding(.trailing, 5)
                         
                         Image(systemName: "chevron.right")
@@ -41,13 +47,25 @@ struct RecentMedicinesView: View {
             }
         }
         .padding(.horizontal)
+        .id(lastRefresh) // Force refresh with changing ID
+        .onAppear {
+            // Force refresh when view appears
+            lastRefresh = UUID()
+        }
     }
     
-    func formatDate(_ date: Date) -> String {
+    // Helper method to get fresh medicine data
+    private func getMostCurrentMedicine(_ medicine: Medicine) -> Medicine {
+        if let current = medicineStore.medicines.first(where: { $0.id == medicine.id }) {
+            return current
+        }
+        return medicine
+    }
+    
+    private func formatDate(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
         formatter.timeStyle = .none
         return formatter.string(from: date)
     }
 }
-

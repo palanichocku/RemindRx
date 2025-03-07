@@ -8,20 +8,21 @@ struct AdherenceHistoryView: View {
     @State private var timeRange = 7 // days
     @State private var showingMedicinePicker = false
     
-    // All medicines without filtering
-    var allAvailableMedicines: [Medicine] {
-        return medicineStore.medicines
+    // Only show medicines that have schedules
+    var availableMedicines: [Medicine] {
+        let medicinesWithSchedules = Set(trackingStore.medicationSchedules.map { $0.medicineId })
+        return medicineStore.medicines.filter { medicinesWithSchedules.contains($0.id) }
     }
     
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
-                if medicineStore.medicines.isEmpty {
-                    // Show empty state when no medicines
+                if availableMedicines.isEmpty {
+                    // Show empty state when no medicines with schedules
                     EmptyStateView(
                         icon: "chart.xyaxis.line",
                         title: "No Medication History",
-                        message: "Add medicines to your collection first to track adherence history"
+                        message: "Add medicine schedules first to track adherence history"
                     )
                     .padding(.top, 40)
                 } else {
@@ -37,7 +38,7 @@ struct AdherenceHistoryView: View {
                         }) {
                             HStack {
                                 if let selectedId = selectedMedicineId,
-                                   let medicine = allAvailableMedicines.first(where: { $0.id == selectedId }) {
+                                   let medicine = availableMedicines.first(where: { $0.id == selectedId }) {
                                     Text(medicine.name)
                                         .fontWeight(.medium)
                                 } else {
@@ -59,7 +60,7 @@ struct AdherenceHistoryView: View {
                         .actionSheet(isPresented: $showingMedicinePicker) {
                             ActionSheet(
                                 title: Text("Select Medicine"),
-                                buttons: allAvailableMedicines.map { medicine in
+                                buttons: availableMedicines.map { medicine in
                                     .default(Text(medicine.name)) {
                                         selectedMedicineId = medicine.id
                                     }
@@ -88,7 +89,7 @@ struct AdherenceHistoryView: View {
                     }
                     
                     if let selectedId = selectedMedicineId,
-                       let medicine = allAvailableMedicines.first(where: { $0.id == selectedId }) {
+                       let medicine = availableMedicines.first(where: { $0.id == selectedId }) {
                         
                         Divider()
                             .padding(.vertical, 5)
@@ -149,12 +150,12 @@ struct AdherenceHistoryView: View {
             .padding(.vertical)
             .onAppear {
                 // Select first medicine by default if none selected
-                if selectedMedicineId == nil && !allAvailableMedicines.isEmpty {
-                    selectedMedicineId = allAvailableMedicines.first?.id
+                if selectedMedicineId == nil && !availableMedicines.isEmpty {
+                    selectedMedicineId = availableMedicines.first?.id
                 }
                 
                 // Debug
-                print("🔍 History view: Found \(allAvailableMedicines.count) total medicines")
+                print("🔍 History view: Found \(availableMedicines.count) medicines with schedules")
                 print("🔍 Recorded doses: \(trackingStore.medicationDoses.count)")
                 
                 // Refresh data when view appears
@@ -162,7 +163,7 @@ struct AdherenceHistoryView: View {
             }
             .sheet(isPresented: $showingFullHistory) {
                 if let selectedId = selectedMedicineId,
-                   let medicine = allAvailableMedicines.first(where: { $0.id == selectedId }) {
+                   let medicine = availableMedicines.first(where: { $0.id == selectedId }) {
                     
                     NavigationView {
                         HistoryDetailView(
@@ -210,24 +211,183 @@ struct AdherenceHistoryView: View {
         .padding(.horizontal)
     }
     
-    // Calculate real statistics for a medicine
+    // Calculate accurate statistics for a medicine
     private func calculateStats(medicineId: UUID) -> (adherenceRate: Double, currentStreak: Int, dosesTaken: Int) {
         // Count doses taken
         let dosesTaken = trackingStore.medicationDoses.filter {
             $0.medicineId == medicineId && $0.taken
         }.count
         
-        // Calculate streak - for now use a simplified approach
-        let streak = max(dosesTaken, 1) // At least 1 if any doses taken
+        // If no doses taken, everything should be zero
+        if dosesTaken == 0 {
+            return (0.0, 0, 0)
+        }
         
-        // Calculate adherence rate - for now use a simplified approach
-        let adherenceRate = dosesTaken > 0 ? 100.0 : 0.0
+        // Calculate adherence rate - compare taken doses vs expected doses
+        var adherenceRate = 0.0
+        
+        // Get schedules for this medicine
+        let schedules = trackingStore.medicationSchedules.filter { $0.medicineId == medicineId }
+        if !schedules.isEmpty {
+            // Calculate expected doses based on schedule
+            let calendar = Calendar.current
+            let endDate = Date()
+            let startDate = calendar.date(byAdding: .day, value: -timeRange, to: endDate) ?? Date()
+            
+            var expectedDoses = 0
+            var currentDate = startDate
+            
+            while currentDate <= endDate {
+                for schedule in schedules {
+                    // Skip if schedule wasn't active on this date
+                    if currentDate < schedule.startDate ||
+                        (schedule.endDate != nil && currentDate > schedule.endDate!) {
+                        continue
+                    }
+                    
+                    // Count expected doses based on frequency
+                    let doseTimes = getDoseTimesForDay(schedule: schedule, date: currentDate)
+                    expectedDoses += doseTimes.count
+                }
+                
+                // Move to next day
+                if let nextDate = calendar.date(byAdding: .day, value: 1, to: currentDate) {
+                    currentDate = nextDate
+                } else {
+                    break
+                }
+            }
+            
+            // Calculate adherence rate
+            adherenceRate = expectedDoses > 0 ? (Double(dosesTaken) / Double(expectedDoses)) * 100.0 : 0.0
+        }
+        
+        // Calculate current streak - only count if dose taken
+        var currentStreak = 0
+        if dosesTaken > 0 {
+            let calendar = Calendar.current
+            let today = calendar.startOfDay(for: Date())
+            var dayToCheck = today
+            
+            while true {
+                let dayStart = calendar.startOfDay(for: dayToCheck)
+                let nextDay = calendar.date(byAdding: .day, value: 1, to: dayStart)!
+                
+                // Get doses for this day
+                let dayDoses = trackingStore.medicationDoses.filter {
+                    $0.medicineId == medicineId &&
+                    calendar.isDate($0.timestamp, inSameDayAs: dayToCheck)
+                }
+                
+                // Get taken doses
+                let takenDoses = dayDoses.filter { $0.taken }
+                
+                // If no taken doses, break streak
+                if takenDoses.isEmpty {
+                    break
+                }
+                
+                // Get scheduled doses for this day
+                var expectedDoses = 0
+                for schedule in schedules {
+                    let doseTimes = getDoseTimesForDay(schedule: schedule, date: dayToCheck)
+                    expectedDoses += doseTimes.count
+                }
+                
+                // If expected doses > 0 but not all taken, break streak
+                if expectedDoses > 0 && takenDoses.count < expectedDoses {
+                    break
+                }
+                
+                // Increment streak and go to previous day
+                currentStreak += 1
+                if let previousDay = calendar.date(byAdding: .day, value: -1, to: dayToCheck) {
+                    dayToCheck = previousDay
+                } else {
+                    break
+                }
+            }
+        }
         
         print("📊 Stats for medicine \(medicineId):")
         print("- Doses taken: \(dosesTaken)")
-        print("- Streak: \(streak)")
+        print("- Streak: \(currentStreak)")
         print("- Adherence rate: \(adherenceRate)%")
         
-        return (adherenceRate, streak, dosesTaken)
+        return (adherenceRate, currentStreak, dosesTaken)
+    }
+    
+    // Helper to get dose times for a specific day based on schedule
+    private func getDoseTimesForDay(schedule: MedicationSchedule, date: Date) -> [Date] {
+        let calendar = Calendar.current
+        let day = calendar.startOfDay(for: date)
+        var doseTimes: [Date] = []
+        
+        // Skip if schedule wasn't active on this date
+        if date < schedule.startDate || (schedule.endDate != nil && date > schedule.endDate!) {
+            return []
+        }
+        
+        switch schedule.frequency {
+        case .daily, .twiceDaily, .threeTimesDaily:
+            // Add all times for the day
+            for time in schedule.timeOfDay {
+                let components = calendar.dateComponents([.hour, .minute], from: time)
+                var doseComponents = calendar.dateComponents([.year, .month, .day], from: day)
+                doseComponents.hour = components.hour
+                doseComponents.minute = components.minute
+                
+                if let doseTime = calendar.date(from: doseComponents) {
+                    doseTimes.append(doseTime)
+                }
+            }
+            
+        case .weekly:
+            // Check if the day is a scheduled day
+            let weekday = calendar.component(.weekday, from: date)
+            let adjustedWeekday = weekday == 1 ? 7 : weekday - 1 // Convert to 1-7 (Mon-Sun)
+            
+            if let daysOfWeek = schedule.daysOfWeek, daysOfWeek.contains(adjustedWeekday) {
+                // Add all times for the day
+                for time in schedule.timeOfDay {
+                    let components = calendar.dateComponents([.hour, .minute], from: time)
+                    var doseComponents = calendar.dateComponents([.year, .month, .day], from: day)
+                    doseComponents.hour = components.hour
+                    doseComponents.minute = components.minute
+                    
+                    if let doseTime = calendar.date(from: doseComponents) {
+                        doseTimes.append(doseTime)
+                    }
+                }
+            }
+            
+        case .custom:
+            // Check if this is a scheduled day based on interval
+            if let interval = schedule.customInterval,
+               let startDay = calendar.ordinality(of: .day, in: .era, for: schedule.startDate),
+               let currentDay = calendar.ordinality(of: .day, in: .era, for: date) {
+                
+                let daysSinceStart = currentDay - startDay
+                if daysSinceStart >= 0 && daysSinceStart % interval == 0 {
+                    // Add all times for the day
+                    for time in schedule.timeOfDay {
+                        let components = calendar.dateComponents([.hour, .minute], from: time)
+                        var doseComponents = calendar.dateComponents([.year, .month, .day], from: day)
+                        doseComponents.hour = components.hour
+                        doseComponents.minute = components.minute
+                        
+                        if let doseTime = calendar.date(from: doseComponents) {
+                            doseTimes.append(doseTime)
+                        }
+                    }
+                }
+            }
+            
+        case .asNeeded:
+            // No scheduled times for as-needed medications
+            break
+        }
+        
+        return doseTimes.sorted()
     }
 }

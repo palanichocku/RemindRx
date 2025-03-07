@@ -1,14 +1,31 @@
 import CoreData
 import Foundation
 
-class CoreDataManager {
-    private let context: NSManagedObjectContext
+public class CoreDataManager {
+    public let context: NSManagedObjectContext
     
-    init(context: NSManagedObjectContext) {
+    public init(context: NSManagedObjectContext) {
         self.context = context
     }
     
     // MARK: - Fetch Operations
+    public func debugMedicine(withId id: UUID) {
+        let request: NSFetchRequest<MedicineEntity> = MedicineEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        
+        do {
+            let results = try context.fetch(request)
+            if let entity = results.first {
+                let expirationDate = entity.expirationDate
+                print("CoreDataManager: DIRECT FROM CORE DATA - Medicine ID: \(id)")
+                print("CoreDataManager: Expiration date in Core Data: \(expirationDate?.description ?? "nil")")
+            } else {
+                print("CoreDataManager: No entity found with ID: \(id)")
+            }
+        } catch {
+            print("CoreDataManager: Error fetching medicine: \(error)")
+        }
+    }
     
     func fetchAllMedicines() -> [Medicine] {
         let request: NSFetchRequest<MedicineEntity> = MedicineEntity.fetchRequest()
@@ -54,36 +71,86 @@ class CoreDataManager {
     // MARK: - Save Operations
     
     func saveMedicine(_ medicine: Medicine) {
-        // Check if medicine already exists
-        let request: NSFetchRequest<MedicineEntity> = MedicineEntity.fetchRequest()
-        request.predicate = NSPredicate(format: "id == %@", medicine.id as CVarArg)
-        request.fetchLimit = 1
-        
-        do {
-            let results = try context.fetch(request)
-            
-            let medicineEntity: MedicineEntity
-            
-            if let existingEntity = results.first {
-                // Update existing entity
-                medicineEntity = existingEntity
-            } else {
-                // Create new entity
-                medicineEntity = MedicineEntity(context: context)
-                medicineEntity.id = medicine.id
-                medicineEntity.dateAdded = medicine.dateAdded
-            }
-            
-            // Update entity properties
-            updateMedicineEntity(medicineEntity, with: medicine)
-            
-            try context.save()
-        } catch {
-            print("Error saving medicine: \(error)")
-        }
+        // Try a more direct approach
+       let request: NSFetchRequest<MedicineEntity> = MedicineEntity.fetchRequest()
+       request.predicate = NSPredicate(format: "id == %@", medicine.id as CVarArg)
+       
+       do {
+           let results = try context.fetch(request)
+           
+           if let existingEntity = results.first {
+               // Explicitly set each attribute
+               print("CoreDataManager: Updating entity directly - ID: \(medicine.id)")
+               print("CoreDataManager: New expiration date: \(medicine.expirationDate)")
+               
+               existingEntity.setValue(medicine.name, forKey: "name")
+               existingEntity.setValue(medicine.description, forKey: "desc")
+               existingEntity.setValue(medicine.manufacturer, forKey: "manufacturer")
+               existingEntity.setValue(medicine.type.rawValue, forKey: "type")
+               existingEntity.setValue(medicine.alertInterval.rawValue, forKey: "alertInterval")
+               existingEntity.setValue(medicine.expirationDate, forKey: "expirationDate")
+               existingEntity.setValue(medicine.barcode, forKey: "barcode")
+               existingEntity.setValue(medicine.source, forKey: "source")
+               
+               // Save immediately
+               try context.save()
+               print("CoreDataManager: Entity saved successfully")
+               
+               // Verify the save
+               if let savedDate = existingEntity.expirationDate {
+                   print("CoreDataManager: Verified expiration date after save: \(savedDate)")
+               }
+           } else {
+               // Create new entity
+               print("CoreDataManager: Creating new entity - ID: \(medicine.id)")
+               let medicineEntity = MedicineEntity(context: context)
+               medicineEntity.id = medicine.id
+               medicineEntity.name = medicine.name
+               medicineEntity.desc = medicine.description
+               medicineEntity.manufacturer = medicine.manufacturer
+               medicineEntity.type = medicine.type.rawValue
+               medicineEntity.alertInterval = medicine.alertInterval.rawValue
+               medicineEntity.expirationDate = medicine.expirationDate
+               medicineEntity.dateAdded = medicine.dateAdded
+               medicineEntity.barcode = medicine.barcode
+               medicineEntity.source = medicine.source
+               
+               try context.save()
+           }
+       } catch {
+           print("CoreDataManager: Error saving medicine: \(error)")
+       }
     }
     
     // MARK: - Delete Operations
+    
+    // Delete all schedules from Core Data
+    func deleteAllSchedules() {
+        let fetchRequest: NSFetchRequest<NSFetchRequestResult> = ScheduleEntity.fetchRequest()
+        let deleteRequest = NSBatchDeleteRequest(fetchRequest: fetchRequest)
+        
+        do {
+            try context.execute(deleteRequest)
+            try context.save()
+            print("Successfully deleted all schedules")
+        } catch {
+            print("Error deleting all schedules: \(error)")
+        }
+    }
+    
+    // Delete all doses from Core Data
+    func deleteAllDoses() {
+        let fetchRequest: NSFetchRequest<NSFetchRequestResult> = DoseEntity.fetchRequest()
+        let deleteRequest = NSBatchDeleteRequest(fetchRequest: fetchRequest)
+        
+        do {
+            try context.execute(deleteRequest)
+            try context.save()
+            print("Successfully deleted all doses")
+        } catch {
+            print("Error deleting all doses: \(error)")
+        }
+    }
     
     func deleteMedicine(_ medicine: Medicine) {
         let request: NSFetchRequest<MedicineEntity> = MedicineEntity.fetchRequest()
@@ -102,13 +169,20 @@ class CoreDataManager {
         }
     }
     
+    // Enhanced version of deleteAllMedicines that ensures all related data is deleted
     func deleteAllMedicines() {
+        // First delete all related data
+        deleteAllSchedules()
+        deleteAllDoses()
+        
+        // Then delete the medicines
         let fetchRequest: NSFetchRequest<NSFetchRequestResult> = MedicineEntity.fetchRequest()
         let deleteRequest = NSBatchDeleteRequest(fetchRequest: fetchRequest)
         
         do {
             try context.execute(deleteRequest)
             try context.save()
+            print("Successfully deleted all medicines")
         } catch {
             print("Error deleting all medicines: \(error)")
         }
@@ -180,10 +254,6 @@ class CoreDataManager {
             return []
         }
     }
-}
-
-// CoreDataManager extensions for Adherence Tracking
-extension CoreDataManager {
     
     // MARK: - Schedule Operations
     
@@ -402,4 +472,5 @@ extension CoreDataManager {
         entity.notes = dose.notes
         entity.skippedReason = dose.skippedReason
     }
+
 }

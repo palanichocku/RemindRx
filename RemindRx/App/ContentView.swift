@@ -2,12 +2,23 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject var medicineStore: MedicineStore
-    @State private var selectedTab = 0
-    @State private var showScannerSheet = false
-    @State private var showAddMedicineForm = false
-    @State private var showTrackingView = false
-    @State private var showFeatureInDevelopment = false
-    @State private var inDevelopmentFeature = ""
+    @State public var selectedTab = 0
+    @State public var showScannerSheet = false
+    @State public var showAddMedicineForm = false
+    @State public var showTrackingView = false
+    @State public var showFeatureInDevelopment = false
+    @State public var inDevelopmentFeature = ""
+    @State public var showingTestDataGenerator: Bool = false
+    
+    // Add refresh state
+    @State private var dashboardRefreshTrigger = UUID()
+    
+    private func refreshAllData() {
+        // Force a refresh of all data
+        medicineStore.loadMedicines()
+        
+        // You could also add code to refresh any other data stores here
+    }
     
     var scannerSheet: some View {
         BarcodeScannerView(
@@ -126,6 +137,7 @@ struct ContentView: View {
                                     showFeatureInDevelopment = true
                                 }
                             )
+                            
                         }
                         .padding(.horizontal)
                         
@@ -152,14 +164,24 @@ struct ContentView: View {
                             if medicineStore.medicines.isEmpty {
                                 EmptyMedicinesView()
                             } else {
-                                RecentMedicinesView(medicines: Array(medicineStore.medicines.prefix(3)))
+                                RecentMedicinesView().id(dashboardRefreshTrigger) // Force refresh
                             }
                         }
+                        #if DEBUG
+                        // Add the developer menu for testing
+                        Spacer()
+                        setupDeveloperMenu()
+                        #endif
                     }
                     .padding(.vertical)
                 }
                 
-                Spacer()
+                //Spacer()
+            }
+            // Force refresh when appearing
+            .onAppear {
+                dashboardRefreshTrigger = UUID()
+                medicineStore.loadMedicines()
             }
             .navigationBarHidden(true)
             .sheet(isPresented: $showScannerSheet) {
@@ -181,10 +203,18 @@ struct ContentView: View {
         }
         .accentColor(AppColors.primaryFallback())
         .onAppear {
-            // Load medicines when app appears
+            //Load medicines when app appears
+            dashboardRefreshTrigger = UUID()
+            medicineStore.loadMedicines()
+        }
+        // Listen for data change notifications
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("MedicineDataChanged"))) { _ in
+            // Update dashboard when data changes
+            dashboardRefreshTrigger = UUID()
             medicineStore.loadMedicines()
         }
     }
+    
 }
 
 struct ContentView_Previews: PreviewProvider {

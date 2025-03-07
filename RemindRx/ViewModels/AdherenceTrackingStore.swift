@@ -53,6 +53,134 @@ class AdherenceTrackingStore: ObservableObject {
         var doseId: UUID?
     }
     
+    func handleAllMedicinesDeleted() {
+        print("🧹 Cleaning up all data after medicines deletion")
+        
+        // Clear all data in memory
+        medicationSchedules.removeAll()
+        medicationDoses.removeAll()
+        todayDoses.removeAll()
+        upcomingDoses.removeAll()
+        
+        // Clear medicine cache
+        clearCache()
+        
+        // Clear all UserDefaults data
+        UserDefaults.standard.removeObject(forKey: "medicationSchedules")
+        UserDefaults.standard.removeObject(forKey: "medicationDoses")
+        
+        // Delete all data from Core Data
+        let coreDataManager = CoreDataManager(context: context)
+        coreDataManager.deleteAllSchedules()
+        coreDataManager.deleteAllDoses()
+        
+        // Notify UI
+        print("✅ All tracking data cleared")
+        DispatchQueue.main.async {
+            self.objectWillChange.send()
+        }
+    }
+    
+    // Helper method to check if data is clean
+    func verifyDataCleanup() -> Bool {
+        let hasNoSchedules = medicationSchedules.isEmpty
+        let hasNoDoses = medicationDoses.isEmpty
+        let hasNoTodayDoses = todayDoses.isEmpty
+        let hasNoUpcomingDoses = upcomingDoses.isEmpty
+        
+        let userDefaultsSchedules = UserDefaults.standard.data(forKey: "medicationSchedules") == nil
+        let userDefaultsDoses = UserDefaults.standard.data(forKey: "medicationDoses") == nil
+        
+        // Check Core Data
+        let schedulesFetchRequest: NSFetchRequest<ScheduleEntity> = ScheduleEntity.fetchRequest()
+        let dosesFetchRequest: NSFetchRequest<DoseEntity> = DoseEntity.fetchRequest()
+        
+        var hasNoSchedulesInCoreData: Bool
+        let hasNoDosesInCoreData: Bool
+        
+        do {
+            hasNoSchedulesInCoreData = try context.count(for: schedulesFetchRequest) == 0
+            hasNoDosesInCoreData = try context.count(for: dosesFetchRequest) == 0
+        } catch {
+            print("Error verifying Core Data cleanup: \(error)")
+            hasNoSchedulesInCoreData = false
+            hasNoDosesInCoreData = false
+        }
+        
+        let isClean = hasNoSchedules && hasNoDoses && hasNoTodayDoses && hasNoUpcomingDoses &&
+                     userDefaultsSchedules && userDefaultsDoses &&
+                     hasNoSchedulesInCoreData && hasNoDosesInCoreData
+        
+        print("Data cleanup verification:")
+        print("- Memory schedules: \(hasNoSchedules ? "Clean ✓" : "Dirty ✗")")
+        print("- Memory doses: \(hasNoDoses ? "Clean ✓" : "Dirty ✗")")
+        print("- Memory today doses: \(hasNoTodayDoses ? "Clean ✓" : "Dirty ✗")")
+        print("- Memory upcoming doses: \(hasNoUpcomingDoses ? "Clean ✓" : "Dirty ✗")")
+        print("- UserDefaults schedules: \(userDefaultsSchedules ? "Clean ✓" : "Dirty ✗")")
+        print("- UserDefaults doses: \(userDefaultsDoses ? "Clean ✓" : "Dirty ✗")")
+        print("- CoreData schedules: \(hasNoSchedulesInCoreData ? "Clean ✓" : "Dirty ✗")")
+        print("- CoreData doses: \(hasNoDosesInCoreData ? "Clean ✓" : "Dirty ✗")")
+        print("Overall status: \(isClean ? "Clean ✓" : "Dirty ✗")")
+        
+        return isClean
+    }
+    
+    // Force cleanup in case data is still found
+    func forceCleanup() {
+        print("🧨 Forcing complete data cleanup")
+        
+        // Clear all in-memory data
+        medicationSchedules.removeAll()
+        medicationDoses.removeAll()
+        todayDoses.removeAll()
+        upcomingDoses.removeAll()
+        medicineCache.removeAll()
+        
+        // Clear all UserDefaults data
+        UserDefaults.standard.removeObject(forKey: "medicationSchedules")
+        UserDefaults.standard.removeObject(forKey: "medicationDoses")
+        
+        // Delete all Core Data entities
+        let coreDataManager = CoreDataManager(context: context)
+        coreDataManager.deleteAllSchedules()
+        coreDataManager.deleteAllDoses()
+        
+        // Verify the cleanup
+        let isClean = verifyDataCleanup()
+        
+        // If still not clean, try more aggressive approach
+        if !isClean {
+            print("⚠️ Standard cleanup failed, attempting more aggressive cleanup")
+            
+            // Try direct Core Data deletion
+            let schedulesFetchRequest: NSFetchRequest<ScheduleEntity> = ScheduleEntity.fetchRequest()
+            let dosesFetchRequest: NSFetchRequest<DoseEntity> = DoseEntity.fetchRequest()
+            
+            do {
+                let schedules = try context.fetch(schedulesFetchRequest)
+                let doses = try context.fetch(dosesFetchRequest)
+                
+                for schedule in schedules {
+                    context.delete(schedule)
+                }
+                
+                for dose in doses {
+                    context.delete(dose)
+                }
+                
+                try context.save()
+                print("✅ Manually deleted all entities")
+            } catch {
+                print("❌ Error during aggressive cleanup: \(error)")
+            }
+        }
+        
+        // Notify UI
+        DispatchQueue.main.async {
+            self.objectWillChange.send()
+        }
+    }
+    
     func forceSchedulesToShowToday() {
         print("⚡️ Forcing schedules to show in Today tab")
         
@@ -500,23 +628,6 @@ class AdherenceTrackingStore: ObservableObject {
     // Access to the medicine store
     var medicineStore: MedicineStore {
         return MedicineStore(context: context)
-    }
-    
-    func handleAllMedicinesDeleted() {
-            // Clear all schedules and doses
-            medicationSchedules.removeAll()
-            medicationDoses.removeAll()
-            
-            // Save empty state
-            saveSchedules()
-            saveDoses()
-            
-            // Update UI
-            updateTodayDoses()
-            updateUpcomingDoses()
-            
-            // Clear cache
-            clearCache()
     }
     
     // MARK: - Data Loading

@@ -6,6 +6,33 @@ struct MedicineListView: View {
     @State private var showAddMedicineForm = false
     @State private var showingDeleteAllConfirmation = false
     @State private var showExpiredOnly = false
+    // Add this state to track when to force refresh views
+    @State private var refreshID = UUID()
+    // Add this to track the observer
+    @State private var observer: NSObjectProtocol?
+    
+    // Helper to format dates consistently
+  private func formatDate(_ date: Date) -> String {
+      let formatter = DateFormatter()
+      formatter.dateStyle = .medium
+      formatter.timeStyle = .none
+      return formatter.string(from: date)
+  }
+    
+    // Helper method to refresh data
+    private func refreshData() {
+        // Generate new UUID to force view refresh
+        refreshID = UUID()
+        
+        // Load fresh data
+        medicineStore.loadMedicines()
+        
+        // Debug print of all medicines for verification
+        print("MEDICINE LIST REFRESH: \(medicineStore.medicines.count) medicines")
+        for medicine in medicineStore.medicines {
+            print("- \(medicine.name): Expires \(formatDate(medicine.expirationDate))")
+        }
+    }
     
     var body: some View {
         VStack(spacing: 0) {
@@ -21,6 +48,7 @@ struct MedicineListView: View {
             // Medicine list
             List {
                 ForEach(filteredMedicines) { medicine in
+                    // Back to the original implementation
                     MedicineTileView(medicine: medicine)
                         .swipeActions(edge: .trailing) {
                             Button(role: .destructive) {
@@ -31,6 +59,11 @@ struct MedicineListView: View {
                         }
                 }
             }
+            .id(refreshID) // This forces the entire list to rebuild
+            //.onAppear {
+            // Reload medicines when list appears
+            //    medicineStore.loadMedicines()
+            //}
             .listStyle(InsetGroupedListStyle())
         }
         .navigationTitle("RemindRx")
@@ -119,6 +152,28 @@ struct MedicineListView: View {
             }
         } message: {
             Text("Are you sure you want to delete all medicines? This action cannot be undone.")
+        }
+        .onAppear {
+            // Force refresh when view appears
+            refreshData()
+            
+            // Set up the notification observer if not already set
+            if observer == nil {
+                observer = NotificationCenter.default.addObserver(
+                    forName: NSNotification.Name("MedicineDataChanged"),
+                    object: nil,
+                    queue: .main
+                ) { _ in
+                    refreshData()
+                }
+            }
+        }
+        .onDisappear {
+            // Clean up observer when view disappears
+            if let observer = observer {
+                NotificationCenter.default.removeObserver(observer)
+                self.observer = nil
+            }
         }
     }
     

@@ -38,8 +38,74 @@ struct AdherenceTrackingView: View {
         NavigationView {
             ZStack {
                 VStack(spacing: 0) {
-                    // Tab selector
-                    TabSelectorView(selectedTab: $selectedTab, tabs: ["Today", "Schedule", "History"])
+                    // Modern compact tab selector - pill design
+                    HStack {
+                        Spacer()
+                        
+                        ZStack {
+                            // Background capsule
+                            Capsule()
+                                .fill(Color(.systemGray6))
+                                .frame(width: 300, height: 44)
+                                .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+                            
+                            // Selection indicator
+                            Capsule()
+                                .fill(Color.white)
+                                .frame(width: 90, height: 36)
+                                .shadow(color: Color.black.opacity(0.1), radius: 1, x: 0, y: 1)
+                                .offset(x: selectedTab == 0 ? -98 : selectedTab == 1 ? 0 : 98)
+                                .animation(.spring(response: 0.3), value: selectedTab)
+                            
+                            // Tab buttons
+                            HStack(spacing: 0) {
+                                // Doses tab
+                                Button(action: { withAnimation { selectedTab = 0 } }) {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "pills")
+                                            .font(.system(size: 14))
+                                        Text("Doses")
+                                            .font(.system(size: 15))
+                                    }
+                                    .fontWeight(selectedTab == 0 ? .semibold : .regular)
+                                    .foregroundColor(selectedTab == 0 ? AppColors.primaryFallback() : .gray)
+                                    .frame(width: 100)
+                                    .padding(.vertical, 8)
+                                }
+                                
+                                // Schedule tab
+                                Button(action: { withAnimation { selectedTab = 1 } }) {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "calendar")
+                                            .font(.system(size: 14))
+                                        Text("Schedule")
+                                            .font(.system(size: 15))
+                                    }
+                                    .fontWeight(selectedTab == 1 ? .semibold : .regular)
+                                    .foregroundColor(selectedTab == 1 ? AppColors.primaryFallback() : .gray)
+                                    .frame(width: 100)
+                                    .padding(.vertical, 8)
+                                }
+                                
+                                // History tab
+                                Button(action: { withAnimation { selectedTab = 2 } }) {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "chart.bar")
+                                            .font(.system(size: 14))
+                                        Text("History")
+                                            .font(.system(size: 15))
+                                    }
+                                    .fontWeight(selectedTab == 2 ? .semibold : .regular)
+                                    .foregroundColor(selectedTab == 2 ? AppColors.primaryFallback() : .gray)
+                                    .frame(width: 100)
+                                    .padding(.vertical, 8)
+                                }
+                            }
+                        }
+                        
+                        Spacer()
+                    }
+                    .padding(.vertical, 16)
                     
                     // Tab content
                     TabView(selection: $selectedTab) {
@@ -184,6 +250,4 @@ struct AdherenceTrackingView: View {
             showingAllInOneSchedulingView = true
         }
     }
-    
-    
 }

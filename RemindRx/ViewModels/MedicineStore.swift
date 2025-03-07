@@ -2,7 +2,7 @@ import SwiftUI
 import CoreData
 import Combine
 
-class MedicineStore: ObservableObject {
+public class MedicineStore: ObservableObject {
     private let coreDataManager: CoreDataManager
     private let notificationManager = NotificationManager.shared
     private let drugLookupService = DrugLookupService()
@@ -11,25 +11,54 @@ class MedicineStore: ObservableObject {
     @Published var draftMedicine: Medicine?
     @Published var isLoading: Bool = false
     @Published var errorMessage: String?
+    @Published var lastUpdateTime: TimeInterval = Date().timeIntervalSince1970
     
-    init(context: NSManagedObjectContext) {
+    public init(context: NSManagedObjectContext) {
         self.coreDataManager = CoreDataManager(context: context)
         loadMedicines()
     }
     
     // MARK: - Data Operations
     
-    func loadMedicines() {
+    func forceUIUpdate() {
+        DispatchQueue.main.async {
+            // Force a refresh of the medicines array
+            self.loadMedicines()
+            self.objectWillChange.send()
+        }
+    }
+    
+    func notifyDataChanged() {
+        NotificationCenter.default.post(name: NSNotification.Name("MedicineDataChanged"), object: nil)
+    }
+    
+    public func loadMedicines() {
         medicines = coreDataManager.fetchAllMedicines()
+        // Update timestamp whenever data is loaded
+        lastUpdateTime = Date().timeIntervalSince1970
+    }
+    
+    func forceRefresh() {
+        loadMedicines()
+        // Explicitly notify of changes
+        DispatchQueue.main.async {
+            self.objectWillChange.send()
+        }
+    }
+    
+    public func debugMedicineInCoreData(id: UUID) {
+        coreDataManager.debugMedicine(withId: id)
     }
     
     func save(_ medicine: Medicine) {
         if let existingIndex = medicines.firstIndex(where: { $0.id == medicine.id }) {
             // Update existing medicine
             medicines[existingIndex] = medicine
+            print("MedicineStore: Updating existing medicine at index \(existingIndex)")
         } else {
             // Add new medicine
             medicines.append(medicine)
+            print("MedicineStore: Adding new medicine")
         }
         
         // Save to Core Data
@@ -38,6 +67,14 @@ class MedicineStore: ObservableObject {
         // Schedule or update notification
         notificationManager.removeNotifications(for: medicine)
         notificationManager.scheduleNotification(for: medicine)
+        
+        // Explicitly notify subscribers that the object has changed
+        DispatchQueue.main.async {
+            self.loadMedicines()
+            self.objectWillChange.send()
+        }
+        // Notify other views
+        notifyDataChanged()
     }
     
     func delete(_ medicine: Medicine) {
@@ -50,13 +87,25 @@ class MedicineStore: ObservableObject {
         notificationManager.removeNotifications(for: medicine)
     }
     
-    func deleteAll() {
+    public func deleteAll() {
         // First notify any AdherenceTrackingStore instances
         NotificationCenter.default.post(name: .allMedicinesDeleted, object: nil)
         
+        // Clear all schedules from UserDefaults
+        UserDefaults.standard.removeObject(forKey: "medicationSchedules")
+        
+        // Clear all doses from UserDefaults
+        UserDefaults.standard.removeObject(forKey: "medicationDoses")
+        
         // Then perform the original deletion
         medicines.removeAll()
+        
+        // Delete all medicines, schedules and doses in Core Data
         coreDataManager.deleteAllMedicines()
+        coreDataManager.deleteAllSchedules()
+        coreDataManager.deleteAllDoses()
+        
+        // Remove all notifications
         UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
     }
     
@@ -91,6 +140,7 @@ class MedicineStore: ObservableObject {
         }
     }
 }
+
 extension Notification.Name {
     static let medicineDeleted = Notification.Name("com.remindrx.medicineDeleted")
     static let allMedicinesDeleted = Notification.Name("com.remindrx.allMedicinesDeleted")

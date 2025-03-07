@@ -10,8 +10,8 @@ struct TodayMedicationsView: View {
     @State private var selectedMedicine: Medicine?
     @State private var selectedTime: Date = Date()
     
-    // State for tab selection
-    @State private var selectedTab = 0 // 0 = Doses, 1 = Upcoming
+    // State for tab selection - now under "Doses" main tab
+    @State private var selectedDosesTab = 0 // 0 = Today, 1 = Upcoming
     
     // State for tracking doses
     @State private var recordedDoses: [UUID: Bool] = [:]
@@ -26,64 +26,51 @@ struct TodayMedicationsView: View {
         print("- Found \(allSchedules.count) schedules")
         
         return VStack(spacing: 0) {
-            // Modern tab selector
-            ZStack {
-                // Background capsule
-                Capsule()
-                    .fill(Color(.systemGray6))
-                    .frame(height: 44)
-                    .padding(.horizontal)
+            // Only the pill selector, no "Doses" header
+            HStack {
+                Spacer()
                 
-                // Tab buttons
-                HStack(spacing: 0) {
-                    // Doses tab
-                    Button(action: { withAnimation { selectedTab = 0 } }) {
-                        ZStack {
-                            if selectedTab == 0 {
-                                Capsule()
-                                    .fill(Color.white)
-                                    .shadow(color: Color.black.opacity(0.1), radius: 2, x: 0, y: 1)
-                            }
-                            
-                            HStack(spacing: 6) {
-                                Image(systemName: "pills")
-                                    .font(.system(size: 15))
-                                    .foregroundColor(selectedTab == 0 ? AppColors.primaryFallback() : .gray)
-                                
-                                Text("Doses")
-                                    .fontWeight(selectedTab == 0 ? .semibold : .regular)
-                                    .foregroundColor(selectedTab == 0 ? AppColors.primaryFallback() : .gray)
-                            }
-                            .padding(.vertical, 8)
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
+                // Pill container
+                ZStack {
+                    // Background capsule
+                    Capsule()
+                        .fill(Color(.systemGray6))
+                        .frame(width: 220, height: 44)
+                        .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
                     
-                    // Upcoming tab
-                    Button(action: { withAnimation { selectedTab = 1 } }) {
-                        ZStack {
-                            if selectedTab == 1 {
-                                Capsule()
-                                    .fill(Color.white)
-                                    .shadow(color: Color.black.opacity(0.1), radius: 2, x: 0, y: 1)
-                            }
-                            
-                            HStack(spacing: 6) {
-                                Image(systemName: "calendar")
-                                    .font(.system(size: 15))
-                                    .foregroundColor(selectedTab == 1 ? AppColors.primaryFallback() : .gray)
-                                
-                                Text("Upcoming")
-                                    .fontWeight(selectedTab == 1 ? .semibold : .regular)
-                                    .foregroundColor(selectedTab == 1 ? AppColors.primaryFallback() : .gray)
-                            }
-                            .padding(.vertical, 8)
+                    // Selection indicator
+                    Capsule()
+                        .fill(Color.white)
+                        .frame(width: 100, height: 36)
+                        .shadow(color: Color.black.opacity(0.1), radius: 1, x: 0, y: 1)
+                        .offset(x: selectedDosesTab == 0 ? -55 : 55)
+                        .animation(.spring(response: 0.3), value: selectedDosesTab)
+                    
+                    // Button row
+                    HStack(spacing: 20) { // Increased spacing between buttons
+                        // Today tab
+                        Button(action: { withAnimation { selectedDosesTab = 0 } }) {
+                            Text("Today")
+                                .font(.system(size: 15))
+                                .fontWeight(selectedDosesTab == 0 ? .semibold : .regular)
+                                .foregroundColor(selectedDosesTab == 0 ? AppColors.primaryFallback() : .gray)
+                                .frame(width: 100)
+                                .padding(.vertical, 8)
+                        }
+                        
+                        // Upcoming tab
+                        Button(action: { withAnimation { selectedDosesTab = 1 } }) {
+                            Text("Upcoming")
+                                .font(.system(size: 15))
+                                .fontWeight(selectedDosesTab == 1 ? .semibold : .regular)
+                                .foregroundColor(selectedDosesTab == 1 ? AppColors.primaryFallback() : .gray)
+                                .frame(width: 100)
+                                .padding(.vertical, 8)
                         }
                     }
-                    .frame(maxWidth: .infinity)
                 }
-                .padding(.horizontal, 6)
-                .padding(.vertical, 4)
+                
+                Spacer()
             }
             .padding(.vertical, 12)
             
@@ -95,7 +82,7 @@ struct TodayMedicationsView: View {
                     message: "Add medication schedules to track your daily doses"
                 )
             } else {
-                if selectedTab == 0 {
+                if selectedDosesTab == 0 {
                     // Today's medications (now called Doses)
                     todayView(schedules: allSchedules)
                 } else {
@@ -140,17 +127,12 @@ struct TodayMedicationsView: View {
         }
     }
     
-    // View for today's medications (now called Doses)
+    // View for today's medications
     private func todayView(schedules: [MedicationSchedule]) -> some View {
         ScrollView {
             VStack(spacing: 20) {
                 // Header for scheduled doses section
                 VStack(alignment: .leading, spacing: 16) {
-                    Text("Today's Doses")
-                        .font(.headline)
-                        .padding(.horizontal)
-                        .padding(.top)
-                    
                     // Get schedules for today
                     let todaySchedules = schedules.filter { isScheduleActiveToday($0) }
                     
@@ -185,34 +167,26 @@ struct TodayMedicationsView: View {
     private func upcomingView(schedules: [MedicationSchedule]) -> some View {
         ScrollView {
             VStack(spacing: 20) {
-                // Header for scheduled doses section
-                VStack(alignment: .leading, spacing: 16) {
-                    Text("Tomorrow's Schedule")
-                        .font(.headline)
-                        .padding(.horizontal)
-                        .padding(.top)
-                    
-                    // Get schedules for tomorrow
-                    let tomorrowSchedules = schedules.filter { isScheduleActiveTomorrow($0) }
-                    
-                    if tomorrowSchedules.isEmpty {
-                        EmptyStateView(
-                            icon: "calendar.badge.clock",
-                            title: "Nothing Scheduled",
-                            message: "You don't have any medications scheduled for tomorrow"
-                        )
-                    } else {
-                        ForEach(tomorrowSchedules.indices, id: \.self) { index in
-                            let schedule = tomorrowSchedules[index]
-                            if let medicine = findMedicine(for: schedule.medicineId) {
-                                // Create modern upcoming dose card for each schedule
-                                modernUpcomingCard(
-                                    medicine: medicine,
-                                    schedule: schedule,
-                                    time: getMorningTime()
-                                )
-                                .padding(.horizontal)
-                            }
+                // Get schedules for tomorrow
+                let tomorrowSchedules = schedules.filter { isScheduleActiveTomorrow($0) }
+                
+                if tomorrowSchedules.isEmpty {
+                    EmptyStateView(
+                        icon: "calendar.badge.clock",
+                        title: "Nothing Scheduled",
+                        message: "You don't have any medications scheduled for tomorrow"
+                    )
+                } else {
+                    ForEach(tomorrowSchedules.indices, id: \.self) { index in
+                        let schedule = tomorrowSchedules[index]
+                        if let medicine = findMedicine(for: schedule.medicineId) {
+                            // Create modern upcoming dose card for each schedule
+                            modernUpcomingCard(
+                                medicine: medicine,
+                                schedule: schedule,
+                                time: getMorningTime()
+                            )
+                            .padding(.horizontal)
                         }
                     }
                 }
@@ -223,6 +197,7 @@ struct TodayMedicationsView: View {
     
     // Modern dose card with recording status
     private func modernDoseCard(medicine: Medicine, schedule: MedicationSchedule, time: Date, isRecorded: Bool) -> some View {
+        // Your existing modernDoseCard implementation
         VStack(alignment: .leading, spacing: 0) {
             // Medicine info header
             HStack(alignment: .center) {

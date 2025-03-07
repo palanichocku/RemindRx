@@ -4,15 +4,32 @@ struct MedicineDetailView: View {
     @EnvironmentObject var medicineStore: MedicineStore
     @Environment(\.presentationMode) var presentationMode
     
-    let medicine: Medicine
+    //@State private var medicine: Medicine
     @State private var showingDeleteConfirmation = false
     @State private var isEditingExpiry = false
     @State private var editedExpirationDate: Date
     @State private var editedAlertInterval: Medicine.AlertInterval
     
+    
+    // Change to a local variable that won't be persisted across navigations
+    private let medicineId: UUID
+    
+    // Computed property to always get the fresh data
+    private var medicine: Medicine {
+        medicineStore.medicines.first { $0.id == medicineId } ?? Medicine(
+            name: "",
+            description: "",
+            manufacturer: "",
+            type: .otc,
+            alertInterval: .week,
+            expirationDate: Date()
+        )
+    }
+    
+    // Initialize with just the ID
     init(medicine: Medicine) {
-        self.medicine = medicine
-        // Initialize state variables with medicine values
+        self.medicineId = medicine.id
+        // Initialize the state properties with the current values
         _editedExpirationDate = State(initialValue: medicine.expirationDate)
         _editedAlertInterval = State(initialValue: medicine.alertInterval)
     }
@@ -200,6 +217,7 @@ struct MedicineDetailView: View {
             .padding()
         }
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(true) // Add this to hide the default back button
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button {
@@ -209,6 +227,19 @@ struct MedicineDetailView: View {
                         .foregroundColor(.red)
                 }
             }
+            ToolbarItem(placement: .navigationBarLeading) {
+                    // Back button with forced refresh
+                    Button {
+                        medicineStore.loadMedicines()
+                        medicineStore.notifyDataChanged()
+                        presentationMode.wrappedValue.dismiss()
+                    } label: {
+                        HStack {
+                            Image(systemName: "chevron.left")
+                            Text("Back")
+                        }
+                    }
+                }
         }
         .alert("Delete Medicine", isPresented: $showingDeleteConfirmation) {
             Button("Cancel", role: .cancel) { }
@@ -219,6 +250,13 @@ struct MedicineDetailView: View {
         } message: {
             Text("Are you sure you want to delete \(medicine.name)? This action cannot be undone.")
         }
+        .onAppear {
+            // Update the editable fields with fresh data whenever the view appears
+            let currentMedicine = medicine
+            editedExpirationDate = currentMedicine.expirationDate
+            editedAlertInterval = currentMedicine.alertInterval
+        }
+        
     }
     
     var isExpired: Bool {
@@ -238,6 +276,11 @@ struct MedicineDetailView: View {
     }
     
     func saveChanges() {
+        // Debug logging
+        print("MedicineDetailView: ===== SAVE CHANGES =====")
+        print("MedicineDetailView: Original medicine expiration: \(formatDate(medicine.expirationDate))")
+        print("MedicineDetailView: Edited expiration date: \(formatDate(editedExpirationDate))")
+        
         // Create updated medicine with edited values
         var updatedMedicine = medicine
         updatedMedicine.expirationDate = editedExpirationDate
@@ -246,7 +289,23 @@ struct MedicineDetailView: View {
         // Save the updated medicine
         medicineStore.save(updatedMedicine)
         
-        // Exit edit mode
-        isEditingExpiry = false
+        // This is the key part - we only need one notification approach
+        // Force a reload and notify other views with small delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            // Reload fresh data
+            self.medicineStore.loadMedicines()
+            
+            // Notify other views to refresh
+            NotificationCenter.default.post(
+                name: NSNotification.Name("MedicineDataChanged"),
+                object: nil
+            )
+            
+            // Exit edit mode
+            self.isEditingExpiry = false
+        }
+        
+        // Debug verification
+        print("MedicineDetailView: Updated medicine: \(updatedMedicine.name) with new expiration date: \(formatDate(updatedMedicine.expirationDate))")
     }
 }

@@ -186,20 +186,6 @@ struct AccessibilityIDs {
 // MARK: - Extensions for Consistent Formatting
 
 extension DateFormatter {
-    static let mediumDate: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .none
-        return formatter
-    }()
-    
-    static let shortDate: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .short
-        formatter.timeStyle = .none
-        return formatter
-    }()
-    
     static let mediumDateTime: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium

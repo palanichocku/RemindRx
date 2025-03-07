@@ -7,21 +7,26 @@ struct RemindRxApp: App {
     // Use AppDelegate for notification delegate and Core Data
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     
-    // Environment state
+    // Environment state - centralized stores that will be available throughout the app
     @StateObject private var medicineStore: MedicineStore
+    @StateObject private var adherenceStore: AdherenceTrackingStore
     
     // Initialize state objects
     init() {
         let context = PersistentContainer.shared.viewContext
-        let store = MedicineStore(context: context)
-        _medicineStore = StateObject(wrappedValue: store)
+        let medStore = MedicineStore(context: context)
+        let adhStore = AdherenceTrackingStore(context: context)
+        
+        _medicineStore = StateObject(wrappedValue: medStore)
+        _adherenceStore = StateObject(wrappedValue: adhStore)
     }
     
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            MainTabView()
                 .environment(\.managedObjectContext, PersistentContainer.shared.viewContext)
                 .environmentObject(medicineStore)
+                .environmentObject(adherenceStore)
                 .onAppear {
                     // Request notification permissions when app launches
                     UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
@@ -29,12 +34,58 @@ struct RemindRxApp: App {
                             print("Error requesting notification permission: \(error)")
                         }
                     }
+                    
+                    // Initial data load
+                    medicineStore.loadMedicines()
+                    adherenceStore.refreshAllData()
                 }
         }
     }
 }
 
-// Persistent container for Core Data
+// Main TabView that manages top-level navigation
+struct MainTabView: View {
+    @State private var selectedTab = 0
+    
+    var body: some View {
+        TabView(selection: $selectedTab) {
+            NavigationView {
+                DashboardView()
+            }
+            .tabItem {
+                Label("Home", systemImage: "house.fill")
+            }
+            .tag(0)
+            
+            NavigationView {
+                MedicineListView()
+            }
+            .tabItem {
+                Label("Medicines", systemImage: "pills.fill")
+            }
+            .tag(1)
+            
+            NavigationView {
+                MedicationTrackingView()
+            }
+            .tabItem {
+                Label("Tracking", systemImage: "chart.bar.fill")
+            }
+            .tag(2)
+            
+            NavigationView {
+                SettingsView()
+            }
+            .tabItem {
+                Label("Settings", systemImage: "gear")
+            }
+            .tag(3)
+        }
+        .accentColor(AppColors.primaryFallback())
+    }
+}
+
+// Persistent container for Core Data - centralized for all access
 class PersistentContainer {
     static let shared = PersistentContainer()
     
@@ -45,7 +96,7 @@ class PersistentContainer {
     }
     
     private init() {
-        container = NSPersistentContainer(name: AppConstants.coreDataModelName)
+        container = NSPersistentContainer(name: "CoreDataModel")
         container.loadPersistentStores { (storeDescription, error) in
             if let error = error as NSError? {
                 fatalError("Unresolved error \(error), \(error.userInfo)")

@@ -417,39 +417,45 @@ struct TodayMedicationsView: View {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
         
-        // Check if already expired
+        // Important fix: Don't check if schedule start date is today or later
+        // Only check if it has ended
         if let endDate = schedule.endDate, calendar.startOfDay(for: endDate) < today {
-            print("Schedule \(schedule.medicineName) has ended on \(endDate)")
             return false
         }
         
-        // Check frequency
+        // Always check frequency regardless of start date
         switch schedule.frequency {
-        case .daily, .twiceDaily, .threeTimesDaily:
+        case .daily, .twiceDaily, .threeTimesDaily, .asNeeded:
             return true
             
         case .weekly:
-            // Check if today's weekday matches
+            // Check if today's weekday matches any day in daysOfWeek
             if let daysOfWeek = schedule.daysOfWeek {
                 let weekday = calendar.component(.weekday, from: today)
-                let adjustedWeekday = weekday == 1 ? 7 : weekday - 1 // Convert to 1-7 (Mon-Sun)
+                // Convert from Sunday=1 to Monday=1 if your app uses Monday=1
+                let adjustedWeekday = weekday == 1 ? 7 : weekday - 1
                 return daysOfWeek.contains(adjustedWeekday)
             }
             return false
             
         case .custom:
-            // For custom interval, check if today is a scheduled day
-            if let interval = schedule.customInterval,
-               let startDay = calendar.ordinality(of: .day, in: .era, for: schedule.startDate),
-               let currentDay = calendar.ordinality(of: .day, in: .era, for: today) {
+            // For custom interval, check if this is a scheduled day
+            if let interval = schedule.customInterval {
+                // For interval=1 (daily), always return true
+                if interval == 1 {
+                    return true
+                }
                 
-                let daysSinceStart = currentDay - startDay
-                return daysSinceStart >= 0 && daysSinceStart % interval == 0
+                // Otherwise calculate if today is a scheduled day
+                if let startDay = calendar.ordinality(of: .day, in: .era, for: schedule.startDate),
+                   let currentDay = calendar.ordinality(of: .day, in: .era, for: today) {
+                    
+                    // This handles schedules with start dates in the future properly
+                    let daysSinceStart = currentDay - startDay
+                    return daysSinceStart >= 0 && daysSinceStart % interval == 0
+                }
             }
             return false
-            
-        case .asNeeded:
-            return true
         }
     }
     

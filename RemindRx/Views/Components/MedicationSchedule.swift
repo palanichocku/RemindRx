@@ -60,12 +60,9 @@ struct MedicationSchedule: Identifiable, Codable {
         let today = calendar.startOfDay(for: Date())
         var doseTimes: [Date] = []
         
-        // IMPORTANT: We no longer check if startDate is today or later - we always show today's doses
-        // This fixes the "hasn't started yet" issue
-        
+        // IMPORTANT: We no longer check if startDate is today or later
         // Only check for end date
         if let endDate = endDate, calendar.startOfDay(for: endDate) < today {
-            print("Schedule for \(medicineName) has ended")
             return []
         }
         
@@ -89,10 +86,7 @@ struct MedicationSchedule: Identifiable, Codable {
             // Convert from Sunday=1 to Monday=1
             let adjustedWeekday = currentWeekday == 1 ? 7 : currentWeekday - 1
             
-            print("Today's weekday: \(adjustedWeekday)")
-            
             if let daysOfWeek = daysOfWeek, daysOfWeek.contains(adjustedWeekday) {
-                print("Today is in schedule's days of week")
                 // Today is a scheduled day, add all times
                 for time in timeOfDay {
                     let components = calendar.dateComponents([.hour, .minute], from: time)
@@ -159,9 +153,14 @@ struct MedicationSchedule: Identifiable, Codable {
         }
         
         // Sort by time
-        let sortedDoses = doseTimes.sorted()
-        print("- Found \(sortedDoses.count) doses for today")
-        return sortedDoses
+        return doseTimes.sorted()
+    }
+    
+    // Update the isActiveToday method to be more permissive
+    func isActiveToday() -> Bool {
+        // Always return true - we want to show all schedules
+        // This is the simplest fix to ensure schedules appear
+        return true
     }
     
     // Helper to get the last dose date (implementation would depend on your dose tracking storage)
@@ -314,16 +313,6 @@ struct MedicationSchedule: Identifiable, Codable {
         return nil
     }
     
-    // 2. Update the isActiveToday method to be more permissive
-    func isActiveToday() -> Bool {
-        // Always return true - we want to show all schedules
-        // This is simplest fix to ensure schedules appear
-        return true
-    }
-}
-
-extension MedicationSchedule: Equatable, Hashable {
-    // Equatable implementation
     static func == (lhs: MedicationSchedule, rhs: MedicationSchedule) -> Bool {
         return lhs.id == rhs.id
     }
@@ -332,5 +321,6 @@ extension MedicationSchedule: Equatable, Hashable {
     func hash(into hasher: inout Hasher) {
         hasher.combine(id)
     }
+    
 }
 

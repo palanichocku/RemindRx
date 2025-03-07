@@ -181,6 +181,7 @@ class AdherenceTrackingStore: ObservableObject {
         }
     }
     
+    // Add this method to force schedules to show for today
     func forceSchedulesToShowToday() {
         print("⚡️ Forcing schedules to show in Today tab")
         
@@ -191,8 +192,8 @@ class AdherenceTrackingStore: ObservableObject {
         for schedule in medicationSchedules where schedule.active {
             print("Processing schedule for Today tab: \(schedule.medicineName)")
             
-            // Get medicine - try multiple approaches to find it
-            if var medicine = getMedicine(byId: schedule.medicineId) {
+            // Get medicine
+            if let medicine = getMedicine(byId: schedule.medicineId) {
                 // For each time in the schedule, create a dose for today
                 for time in schedule.timeOfDay {
                     // Create a time for today
@@ -216,64 +217,13 @@ class AdherenceTrackingStore: ObservableObject {
                             status: recordedDose?.status,
                             doseId: recordedDose?.id
                         ))
-                        
-                        print("Added forced dose for \(medicine.name) at \(doseTime.formatted(date: .omitted, time: .shortened))")
                     }
-                }
-            } else {
-                // Fallback: Try to load the medicine from the store
-                print("⚠️ Could not find medicine for ID: \(schedule.medicineId), trying to load it")
-                
-                // Force reload medicines
-                let medicineStore = MedicineStore(context: context)
-                medicineStore.loadMedicines()
-                
-                // Try again after reload
-                if let medicine = medicineStore.medicines.first(where: { $0.id == schedule.medicineId }) {
-                    // Cache it for future
-                    medicineCache[schedule.medicineId] = medicine
-                    
-                    // Create doses for this medicine
-                    for time in schedule.timeOfDay {
-                        // Create a time for today
-                        let calendar = Calendar.current
-                        let today = calendar.startOfDay(for: Date())
-                        let components = calendar.dateComponents([.hour, .minute], from: time)
-                        var doseComponents = calendar.dateComponents([.year, .month, .day], from: today)
-                        doseComponents.hour = components.hour
-                        doseComponents.minute = components.minute
-                        
-                        if let doseTime = calendar.date(from: doseComponents) {
-                            // Check if this dose has been recorded
-                            let recordedDose = findRecordedDose(forMedicine: schedule.medicineId, around: doseTime)
-                            
-                            // Add to today's doses
-                            todayDoses.append(TodayDose(
-                                id: UUID(),
-                                medicine: medicine,
-                                scheduledTime: doseTime,
-                                schedule: schedule,
-                                status: recordedDose?.status,
-                                doseId: recordedDose?.id
-                            ))
-                            
-                            print("Added fallback dose for \(medicine.name) at \(doseTime.formatted(date: .omitted, time: .shortened))")
-                        }
-                    }
-                } else {
-                    print("❌ Failed to find medicine with ID: \(schedule.medicineId)")
                 }
             }
         }
         
         // Sort by time
         todayDoses.sort { $0.scheduledTime < $1.scheduledTime }
-        print("✅ Created \(todayDoses.count) doses for Today tab")
-        
-        // Force UI update
-        DispatchQueue.main.async {
-            self.objectWillChange.send()
-        }
     }
 
     // 2. Update the refreshAllData method to call forceSchedulesToShowToday
@@ -321,83 +271,37 @@ class AdherenceTrackingStore: ObservableObject {
         }
     }
 
-    /// Direct method to force save a schedule and ensure it appears in the UI
+    // Add this method to properly create and save schedules
     func forceSaveAndShowSchedule(_ schedule: MedicationSchedule) {
-        print("⭐️ FORCE SAVING SCHEDULE: \(schedule.medicineName) (Med ID: \(schedule.medicineId))")
-        
-        // 1. First add to local collection
+        // Create a valid copy with yesterday as the start date
         var validatedSchedule = schedule
+        validatedSchedule.startDate = Calendar.current.date(byAdding: .day, value: -1, to: Date()) ?? Date()
         
         // Ensure schedule has required fields
         if validatedSchedule.timeOfDay.isEmpty {
-            print("⚠️ Schedule has no times, adding default")
             let defaultTime = Calendar.current.date(bySettingHour: 9, minute: 0, second: 0, of: Date()) ?? Date()
             validatedSchedule.timeOfDay = [defaultTime]
         }
         
         if validatedSchedule.frequency == .weekly && (validatedSchedule.daysOfWeek == nil || validatedSchedule.daysOfWeek?.isEmpty == true) {
-            print("⚠️ Weekly schedule has no days, adding Monday")
             validatedSchedule.daysOfWeek = [1] // Default to Monday
         }
         
-        // Remove any existing schedule for this medicine to avoid duplicates
+        // Remove any existing schedules for this medicine to avoid duplicates
         medicationSchedules.removeAll { $0.medicineId == schedule.medicineId }
         
         // Add to our collection
         medicationSchedules.append(validatedSchedule)
-        print("✅ Added to memory collection: \(medicationSchedules.count) total schedules")
         
-        // 2. Save to UserDefaults for immediate access
-        do {
-            let scheduleData = try JSONEncoder().encode(medicationSchedules)
-            UserDefaults.standard.set(scheduleData, forKey: "medicationSchedules")
-            print("✅ Saved to UserDefaults")
-        } catch {
-            print("❌ Error saving to UserDefaults: \(error)")
-        }
+        // Save to persistent storage
+        saveSchedules()
         
-        // 3. Save to CoreData
-        let coreDataManager = CoreDataManager(context: context)
-        coreDataManager.saveSchedule(validatedSchedule)
-        print("✅ Saved to CoreData")
+        // Force rebuild today's doses
+        updateTodayDoses()
         
-        // 4. Force rebuild all doses
-        loadDoses() // Ensure latest doses
-        
-        // Process today's doses
-        var newTodayDoses: [TodayDose] = []
-        let todayTimes = validatedSchedule.getTodayDoseTimes()
-        print("Schedule has \(todayTimes.count) doses for today")
-        
-        if let medicine = getMedicine(byId: validatedSchedule.medicineId) {
-            for time in todayTimes {
-                let recordedDose = findRecordedDose(forMedicine: validatedSchedule.medicineId, around: time)
-                
-                newTodayDoses.append(TodayDose(
-                    id: UUID(),
-                    medicine: medicine,
-                    scheduledTime: time,
-                    schedule: validatedSchedule,
-                    status: recordedDose?.status,
-                    doseId: recordedDose?.id
-                ))
-            }
-        } else {
-            print("⚠️ Warning: Could not find medicine for ID: \(validatedSchedule.medicineId)")
-        }
-        
-        // Add these new doses to existing ones
-        todayDoses.append(contentsOf: newTodayDoses)
-        todayDoses.sort { $0.scheduledTime < $1.scheduledTime }
-        print("✅ Updated today's doses: \(todayDoses.count) total")
-        
-        // 5. Update upcoming doses
-        updateUpcomingDoses()
-        
-        // 6. Force notify UI of changes
+        // Force UI update
         DispatchQueue.main.async {
             self.objectWillChange.send()
-            print("✅ UI notified of changes")
         }
     }
     
@@ -700,88 +604,10 @@ class AdherenceTrackingStore: ObservableObject {
     }
     
     // Replace your current addSchedule method with this improved version
+    // Replace the addSchedule method with this improved version
     func addSchedule(_ schedule: MedicationSchedule) {
-        print("⭐️ ADDING SCHEDULE: \(schedule.medicineName) (Med ID: \(schedule.medicineId))")
-        
-        // 1. Validate schedule - use a day earlier for start date
-        var validatedSchedule = schedule
-        
-        // Always use yesterday as the start date to ensure things appear today
-        validatedSchedule.startDate = Calendar.current.date(byAdding: .day, value: -1, to: Date()) ?? Date()
-        
-        // Ensure schedule has required fields
-        if validatedSchedule.timeOfDay.isEmpty {
-            print("⚠️ Schedule has no times, adding default")
-            let defaultTime = Calendar.current.date(bySettingHour: 9, minute: 0, second: 0, of: Date()) ?? Date()
-            validatedSchedule.timeOfDay = [defaultTime]
-        }
-        
-        if validatedSchedule.frequency == .weekly && (validatedSchedule.daysOfWeek == nil || validatedSchedule.daysOfWeek?.isEmpty == true) {
-            print("⚠️ Weekly schedule has no days, adding Monday")
-            validatedSchedule.daysOfWeek = [1] // Default to Monday
-        }
-        
-        // 2. Remove any existing schedules for this medicine to avoid duplicates
-        medicationSchedules.removeAll { $0.medicineId == schedule.medicineId }
-        
-        // 3. Add to our collection
-        medicationSchedules.append(validatedSchedule)
-        print("✅ Added to memory collection: \(medicationSchedules.count) total schedules")
-        
-        // 4. Save to UserDefaults for immediate access
-        do {
-            let scheduleData = try JSONEncoder().encode(medicationSchedules)
-            UserDefaults.standard.set(scheduleData, forKey: "medicationSchedules")
-            print("✅ Saved to UserDefaults")
-        } catch {
-            print("❌ Error saving to UserDefaults: \(error)")
-        }
-        
-        // 5. Save to CoreData
-        let coreDataManager = CoreDataManager(context: context)
-        coreDataManager.saveSchedule(validatedSchedule)
-        print("✅ Saved to CoreData")
-        
-        // 6. MANUALLY CREATE TODAY DOSES
-        // Don't rely on updateTodayDoses - create doses explicitly
-        if let medicine = getMedicine(byId: validatedSchedule.medicineId) {
-            for time in validatedSchedule.timeOfDay {
-                // Create a time for today
-                let calendar = Calendar.current
-                let today = calendar.startOfDay(for: Date())
-                let components = calendar.dateComponents([.hour, .minute], from: time)
-                var doseComponents = calendar.dateComponents([.year, .month, .day], from: today)
-                doseComponents.hour = components.hour
-                doseComponents.minute = components.minute
-                
-                if let doseTime = calendar.date(from: doseComponents) {
-                    // Add to today's doses - force creation for today
-                    todayDoses.append(TodayDose(
-                        id: UUID(),
-                        medicine: medicine,
-                        scheduledTime: doseTime,
-                        schedule: validatedSchedule,
-                        status: nil,
-                        doseId: nil
-                    ))
-                    
-                    print("✅ Manually added dose for \(medicine.name) at \(doseTime.formatted(date: .omitted, time: .shortened))")
-                }
-            }
-        }
-        
-        // Sort today's doses
-        todayDoses.sort { $0.scheduledTime < $1.scheduledTime }
-        
-        // 7. Update upcoming doses
-        updateUpcomingDoses()
-        print("✅ Updated upcoming doses")
-        
-        // 8. Notify UI of changes
-        DispatchQueue.main.async {
-            self.objectWillChange.send()
-            print("✅ UI notified of changes")
-        }
+        // Use the force save method to ensure schedule shows up
+        forceSaveAndShowSchedule(schedule)
     }
     
     func updateSchedule(_ schedule: MedicationSchedule) {

@@ -27,6 +27,129 @@ public class CoreDataManager {
         }
     }
     
+    func saveHistoryRecord(_ record: MedicationHistoryRecord) {
+        // Check if we already have this record
+        let fetchRequest: NSFetchRequest<HistoryRecordEntity> = HistoryRecordEntity.fetchRequest()
+        fetchRequest.predicate = NSPredicate(format: "id == %@", record.id as CVarArg)
+        
+        do {
+            let results = try context.fetch(fetchRequest)
+            
+            let entity: HistoryRecordEntity
+            
+            if let existingEntity = results.first {
+                // Update existing
+                entity = existingEntity
+            } else {
+                // Create new
+                entity = HistoryRecordEntity(context: context)
+                entity.id = record.id
+            }
+            
+            // Set properties
+            entity.medicineId = record.medicineId
+            entity.medicineName = record.medicineName
+            entity.scheduledTime = record.scheduledTime
+            entity.recordedTime = record.recordedTime
+            entity.status = record.status.rawValue
+            entity.notes = record.notes
+            
+            // Save
+            try context.save()
+        } catch {
+            print("Error saving history record: \(error)")
+        }
+    }
+    
+    func fetchAllHistoryRecords() -> [MedicationHistoryRecord] {
+        let fetchRequest: NSFetchRequest<HistoryRecordEntity> = HistoryRecordEntity.fetchRequest()
+        
+        do {
+            let results = try context.fetch(fetchRequest)
+            
+            return results.compactMap { entity -> MedicationHistoryRecord? in
+                guard let id = entity.id,
+                      let medicineId = entity.medicineId,
+                      let medicineName = entity.medicineName,
+                      let scheduledTime = entity.scheduledTime,
+                      let recordedTime = entity.recordedTime,
+                      let statusString = entity.status,
+                      let status = MedicationDose.DoseStatus(rawValue: statusString) else {
+                    return nil
+                }
+                
+                return MedicationHistoryRecord(
+                    id: id,
+                    medicineId: medicineId,
+                    medicineName: medicineName,
+                    scheduledTime: scheduledTime,
+                    recordedTime: recordedTime,
+                    status: status,
+                    notes: entity.notes
+                )
+            }
+        } catch {
+            print("Error fetching history records: \(error)")
+            return []
+        }
+    }
+    
+    func deleteHistoryRecordsBeforeDate(_ date: Date) {
+        // This should be adjusted to match your Core Data entity name if different
+        let fetchRequest = NSFetchRequest<NSFetchRequestResult>(entityName: "HistoryRecordEntity")
+        fetchRequest.predicate = NSPredicate(format: "recordedTime < %@", date as NSDate)
+        
+        // Use batch delete request for efficiency with large datasets
+        let deleteRequest = NSBatchDeleteRequest(fetchRequest: fetchRequest)
+        
+        do {
+            try context.execute(deleteRequest)
+            try context.save()
+            print("Successfully deleted old history records from Core Data")
+        } catch {
+            print("Error deleting history records: \(error)")
+        }
+    }
+    
+    // Add this to CoreDataManager
+    func deleteDosesForMedicine(medicineId: UUID) {
+        let fetchRequest: NSFetchRequest<DoseEntity> = DoseEntity.fetchRequest()
+        fetchRequest.predicate = NSPredicate(format: "medicineId == %@", medicineId as CVarArg)
+        
+        do {
+            let doses = try context.fetch(fetchRequest)
+            print("Found \(doses.count) dose records to delete from Core Data")
+            
+            for dose in doses {
+                context.delete(dose)
+            }
+            
+            try context.save()
+        } catch {
+            print("Error deleting doses from Core Data: \(error)")
+        }
+    }
+
+    // Add this to CoreDataManager
+    func deleteSchedulesForMedicine(medicineId: UUID) {
+        let fetchRequest: NSFetchRequest<ScheduleEntity> = ScheduleEntity.fetchRequest()
+        fetchRequest.predicate = NSPredicate(format: "medicineId == %@", medicineId as CVarArg)
+        
+        do {
+            let schedules = try context.fetch(fetchRequest)
+            print("Found \(schedules.count) schedule records to delete from Core Data")
+            
+            for schedule in schedules {
+                context.delete(schedule)
+            }
+            
+            try context.save()
+        } catch {
+            print("Error deleting schedules from Core Data: \(error)")
+        }
+    }
+    
+    
     func fetchAllMedicines() -> [Medicine] {
         let request: NSFetchRequest<MedicineEntity> = MedicineEntity.fetchRequest()
         request.sortDescriptors = [NSSortDescriptor(key: "dateAdded", ascending: false)]

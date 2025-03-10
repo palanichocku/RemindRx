@@ -108,7 +108,8 @@ public struct TestDataView: View {
         isGenerating = true
         
         // Use medicineStore directly to delete all medicines
-        medicineStore.deleteAll()
+        //medicineStore.deleteAll()
+        medicineStore.deleteAllMedicinesWithCleanup()
         
         // Update states on main thread with delay
         DispatchQueue.main.async {

@@ -2,10 +2,13 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject var medicineStore: MedicineStore
+    @EnvironmentObject var adherenceStore: AdherenceTrackingStore
     @State public var selectedTab = 0
     @State public var showScannerSheet = false
     @State public var showAddMedicineForm = false
     @State public var showTrackingView = false
+    @State public var showReportView = false
+    @State public var showRefillView = false
     @State public var showFeatureInDevelopment = false
     @State public var inDevelopmentFeature = ""
     @State public var showingTestDataGenerator: Bool = false
@@ -16,8 +19,7 @@ struct ContentView: View {
     private func refreshAllData() {
         // Force a refresh of all data
         medicineStore.loadMedicines()
-        
-        // You could also add code to refresh any other data stores here
+        adherenceStore.refreshAllData()
     }
     
     var scannerSheet: some View {
@@ -33,7 +35,7 @@ struct ContentView: View {
                                 // Pre-populate form with found data
                                 self.medicineStore.draftMedicine = medicine
                                 self.showAddMedicineForm = true
-                            case .failure(let error):
+                            case .failure:
                                 // Show empty form for manual entry
                                 self.medicineStore.draftMedicine = Medicine(
                                     name: "",
@@ -69,161 +71,93 @@ struct ContentView: View {
     }
     
     var body: some View {
-        NavigationView {
-            VStack(spacing: 0) {
-                // Header
-                VStack {
-                    Text("RemindRx")
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
-                        .foregroundColor(AppColors.primaryFallback())
-                    
-                    Text("Medicine Management")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                }
-                .padding(.top)
-                
-                // Main dashboard with icons
-                ScrollView {
-                    VStack(spacing: 20) {
-                        // Main action buttons grid
-                        LazyVGrid(columns: [
-                            GridItem(.flexible()),
-                            GridItem(.flexible())
-                        ], spacing: 20) {
-                            // Scan button
-                            DashboardButton(
-                                title: "Scan",
-                                description: "Scan medicine barcode",
-                                icon: "barcode.viewfinder",
-                                iconColor: .blue,
-                                action: {
-                                    showScannerSheet = true
-                                }
-                            )
-                            
-                            // Track button
-                            DashboardButton(
-                                title: "Track",
-                                description: "Track medication adherence",
-                                icon: "list.bullet.clipboard",
-                                iconColor: .green,
-                                action: {
-                                    showTrackingView = true
-                                }
-                            )
-                            
-                            // Report button
-                            DashboardButton(
-                                title: "Report",
-                                description: "View medication reports",
-                                icon: "chart.bar.doc.horizontal",
-                                iconColor: .orange,
-                                action: {
-                                    inDevelopmentFeature = "Medication Reports"
-                                    showFeatureInDevelopment = true
-                                }
-                            )
-                            
-                            // Refill button
-                            DashboardButton(
-                                title: "Refill",
-                                description: "Manage medication refills",
-                                icon: "arrow.clockwise.circle",
-                                iconColor: .purple,
-                                action: {
-                                    inDevelopmentFeature = "Medication Refills"
-                                    showFeatureInDevelopment = true
-                                }
-                            )
-                            
-                        }
-                        .padding(.horizontal)
-                        
-                        Divider()
-                            .padding(.vertical, 10)
-                        
-                        // Medicine list section
-                        VStack(alignment: .leading, spacing: 10) {
-                            HStack {
-                                Text("My Medicines")
-                                    .font(.headline)
-                                
-                                Spacer()
-                                
-                                NavigationLink(destination: MedicineListView()) {
-                                    Text("See All")
-                                        .font(.subheadline)
-                                        .foregroundColor(AppColors.primaryFallback())
-                                }
-                            }
-                            .padding(.horizontal)
-                            
-                            // Show recent medicines
-                            if medicineStore.medicines.isEmpty {
-                                EmptyMedicinesView()
-                            } else {
-                                RecentMedicinesView().id(dashboardRefreshTrigger) // Force refresh
-                            }
-                        }
-                        #if DEBUG
-                        // Add the developer menu for testing
-                        Spacer()
-                        setupDeveloperMenu()
-                        #endif
-                    }
-                    .padding(.vertical)
-                }
-                
-                //Spacer()
+        TabView(selection: $selectedTab) {
+            // Dashboard Tab
+            NavigationView {
+                DashboardView()
             }
-            // Force refresh when appearing
-            .onAppear {
-                dashboardRefreshTrigger = UUID()
-                medicineStore.loadMedicines()
+            .tabItem {
+                Image(systemName: "house.fill")
+                Text("Home")
             }
-            .navigationBarHidden(true)
-            .sheet(isPresented: $showScannerSheet) {
-                scannerSheet
+            .tag(0)
+            
+            // Medicines Tab
+            NavigationView {
+                MedicineListView()
             }
-            .sheet(isPresented: $showAddMedicineForm) {
-                MedicineFormView(isPresented: $showAddMedicineForm)
+            .tabItem {
+                Image(systemName: "pills.fill")
+                Text("Medicines")
             }
-            .sheet(isPresented: $showTrackingView) {
+            .tag(1)
+            
+            // Tracking Tab
+            NavigationView {
                 AdherenceTrackingView()
             }
-            .alert(isPresented: $showFeatureInDevelopment) {
-                Alert(
-                    title: Text("Coming Soon"),
-                    message: Text("\(inDevelopmentFeature) feature is currently under development and will be available in a future update."),
-                    dismissButton: .default(Text("OK"))
-                )
+            .tabItem {
+                Image(systemName: "checkmark.circle.fill")
+                Text("Tracking")
             }
+            .tag(2)
+            
+            // Settings Tab
+            NavigationView {
+                SettingsView()
+            }
+            .tabItem {
+                Image(systemName: "gear")
+                Text("Settings")
+            }
+            .tag(3)
         }
         .accentColor(AppColors.primaryFallback())
+        // Force refresh when appearing
         .onAppear {
-            //Load medicines when app appears
             dashboardRefreshTrigger = UUID()
-            medicineStore.loadMedicines()
+            refreshAllData()
+        }
+        .sheet(isPresented: $showScannerSheet) {
+            scannerSheet
+        }
+        .sheet(isPresented: $showAddMedicineForm) {
+            MedicineFormView(isPresented: $showAddMedicineForm)
+        }
+        .sheet(isPresented: $showTrackingView) {
+            DosageTrackingView()
+        }
+        .sheet(isPresented: $showReportView) {
+            ReportView()
+        }
+        .sheet(isPresented: $showRefillView) {
+            RefillManagementView()
+        }
+        .alert(isPresented: $showFeatureInDevelopment) {
+            Alert(
+                title: Text("Coming Soon"),
+                message: Text("\(inDevelopmentFeature) feature is currently under development and will be available in a future update."),
+                dismissButton: .default(Text("OK"))
+            )
         }
         // Listen for data change notifications
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("MedicineDataChanged"))) { _ in
             // Update dashboard when data changes
             dashboardRefreshTrigger = UUID()
-            medicineStore.loadMedicines()
+            refreshAllData()
         }
     }
-    
 }
 
 struct ContentView_Previews: PreviewProvider {
     static var previews: some View {
         let context = PersistentContainer.shared.viewContext
         let medicineStore = MedicineStore(context: context)
+        let adherenceStore = AdherenceTrackingStore(context: context)
         
         ContentView()
             .environment(\.managedObjectContext, context)
             .environmentObject(medicineStore)
+            .environmentObject(adherenceStore)
     }
 }

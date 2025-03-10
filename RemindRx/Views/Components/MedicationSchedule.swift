@@ -156,6 +156,75 @@ struct MedicationSchedule: Identifiable, Codable {
         return doseTimes.sorted()
     }
     
+    // Override to force today's dose times to show for testing
+        func getTodayDoseTimes(forceShowToday: Bool = false) -> [Date] {
+            let calendar = Calendar.current
+            let today = calendar.startOfDay(for: Date())
+            var times: [Date] = []
+            
+            // If we're before the start date and not forcing, return empty
+            if today < calendar.startOfDay(for: startDate) && !forceShowToday {
+                return []
+            }
+            
+            // If we're after the end date and not forcing, return empty
+            if let endDate = endDate, today > calendar.startOfDay(for: endDate) && !forceShowToday {
+                return []
+            }
+            
+            // Determine if this schedule should show doses today based on frequency
+            let shouldShowToday = forceShowToday || isDueTodayBasedOnFrequency(calendar: calendar, today: today)
+            
+            if shouldShowToday {
+                // Add all times for today
+                for time in timeOfDay {
+                    let components = calendar.dateComponents([.hour, .minute], from: time)
+                    var doseComponents = calendar.dateComponents([.year, .month, .day], from: today)
+                    doseComponents.hour = components.hour
+                    doseComponents.minute = components.minute
+                    
+                    if let doseTime = calendar.date(from: doseComponents) {
+                        times.append(doseTime)
+                    }
+                }
+            }
+            
+            return times.sorted()
+        }
+    
+        // Helper method to determine if doses are due today based on frequency
+        private func isDueTodayBasedOnFrequency(calendar: Calendar, today: Date) -> Bool {
+            switch frequency {
+            case .daily, .twiceDaily, .threeTimesDaily:
+                return true
+                
+            case .weekly:
+                // Check if today matches any of the days of week in the schedule
+                if let daysOfWeek = daysOfWeek {
+                    let weekday = calendar.component(.weekday, from: today)
+                    // Convert to 1-based where 1 is Monday (to match your convention)
+                    let adjustedWeekday = weekday % 7 + 1
+                    return daysOfWeek.contains(adjustedWeekday)
+                }
+                return false
+                
+            case .custom:
+                // Check if today is a multiple of the interval from the start date
+                if let interval = customInterval,
+                   let startDay = calendar.ordinality(of: .day, in: .era, for: startDate),
+                   let currentDay = calendar.ordinality(of: .day, in: .era, for: today) {
+                    
+                    let daysSinceStart = currentDay - startDay
+                    return daysSinceStart % interval == 0
+                }
+                return false
+                
+            case .asNeeded:
+                // As-needed medications don't have scheduled times
+                return false
+            }
+        }
+    
     // Update the isActiveToday method to be more permissive
     func isActiveToday() -> Bool {
         // Always return true - we want to show all schedules

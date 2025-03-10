@@ -1,10 +1,3 @@
-//
-//  Dashboard.swift
-//  RemindRx
-//
-//  Created by Palam Chocku on 3/7/25.
-//
-
 import SwiftUI
 
 struct DashboardView: View {
@@ -14,6 +7,9 @@ struct DashboardView: View {
     @State private var showScannerSheet = false
     @State private var showAddMedicineForm = false
     @State private var showTrackingView = false
+    @State private var todayDosesTabIndex = 0 // To store which tab to show in tracking view
+    @State private var showReportView = false
+    @State private var showRefillView = false
     @State private var showFeatureInDevelopment = false
     @State private var inDevelopmentFeature = ""
     @State private var selectedMedicine: Medicine? = nil
@@ -49,24 +45,15 @@ struct DashboardView: View {
                 .padding(.horizontal)
                 .padding(.top, 10)
                 
-                // Summary cards
-                summaryCardsSection
-                
-                // Quick action buttons
+                // Quick action buttons - 5 icons in a grid
                 quickActionsGridSection
                     .padding(.horizontal)
                 
                 Divider()
                     .padding(.vertical, 5)
                 
-                // Medicine list section
-                medicineListSection
-                
-                // Today's doses section
+                // Today's doses section - if there are any doses today
                 if !adherenceStore.todayDoses.isEmpty {
-                    Divider()
-                        .padding(.vertical, 5)
-                    
                     todayDosesSection
                 }
                 
@@ -93,7 +80,13 @@ struct DashboardView: View {
             }
         }
         .sheet(isPresented: $showTrackingView) {
-            AdherenceTrackingView()
+            DosageTrackingView()
+        }
+        .sheet(isPresented: $showReportView) {
+            ReportView() // New view for reports including stats
+        }
+        .sheet(isPresented: $showRefillView) {
+            RefillManagementView() // New view for refill management
         }
         .alert(isPresented: $showFeatureInDevelopment) {
             Alert(
@@ -121,49 +114,11 @@ struct DashboardView: View {
     
     // MARK: - Section Views
     
-    private var summaryCardsSection: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 15) {
-                // Total medicines
-                summaryCard(
-                    title: "Total Medicines",
-                    value: "\(medicineStore.medicines.count)",
-                    icon: "pills.fill",
-                    color: .blue
-                )
-                
-                // Expired medicines
-                summaryCard(
-                    title: "Expired",
-                    value: "\(medicineStore.expiredMedicines.count)",
-                    icon: "exclamationmark.circle.fill",
-                    color: .red
-                )
-                
-                // Expiring soon
-                summaryCard(
-                    title: "Expiring Soon",
-                    value: "\(medicineStore.expiringSoonMedicines.count)",
-                    icon: "exclamationmark.triangle.fill",
-                    color: .yellow
-                )
-                
-                // Today's doses
-                summaryCard(
-                    title: "Today's Doses",
-                    value: "\(adherenceStore.todayDoses.count)",
-                    icon: "calendar.badge.clock.fill",
-                    color: .green
-                )
-            }
-            .padding(.horizontal)
-        }
-    }
-    
     private var quickActionsGridSection: some View {
         LazyVGrid(columns: [
             GridItem(.flexible()),
-            GridItem(.flexible())
+            GridItem(.flexible()),
+            GridItem(.flexible()),
         ], spacing: 20) {
             // Scan button
             DashboardButton(
@@ -176,26 +131,40 @@ struct DashboardView: View {
                 }
             )
             
-            // Track button
-            DashboardButton(
-                title: "Track",
-                description: "Track medication adherence",
-                icon: "list.bullet.clipboard",
-                iconColor: .green,
-                action: {
-                    showTrackingView = true
-                }
-            )
+    // New Today/Dosage button
+    DashboardButton(
+        title: "Dosage",
+        description: "Track your medications",
+        icon: "pills.circle.fill",
+        iconColor: .green,
+        action: {
+            showTrackingView = true
+        }
+    )
             
             // Report button
             DashboardButton(
                 title: "Report",
-                description: "View medication reports",
+                description: "View stats & reports",
                 icon: "chart.bar.doc.horizontal",
                 iconColor: .orange,
                 action: {
-                    inDevelopmentFeature = "Medication Reports"
+                    showReportView = true
+                }
+            )
+            
+            // Refill button
+            DashboardButton(
+                title: "Refill",
+                description: "Manage medication refills",
+                icon: "arrow.clockwise.circle",
+                iconColor: .purple,
+                action: {
+                    // Use feature-in-development until implemented
+                    inDevelopmentFeature = "Medication Refills"
                     showFeatureInDevelopment = true
+                    // Uncomment when implemented
+                    // showRefillView = true
                 }
             )
             
@@ -204,7 +173,7 @@ struct DashboardView: View {
                 title: "Add",
                 description: "Add medicine manually",
                 icon: "plus.circle",
-                iconColor: .purple,
+                iconColor: .indigo,
                 action: {
                     medicineStore.draftMedicine = Medicine(
                         name: "",
@@ -218,76 +187,6 @@ struct DashboardView: View {
                 }
             )
         }
-    }
-    
-    private var medicineListSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("My Medicines")
-                    .font(.headline)
-                    .padding(.horizontal)
-                
-                Spacer()
-                
-                NavigationLink(destination: MedicineListView()) {
-                    Text("See All")
-                        .font(.subheadline)
-                        .foregroundColor(AppColors.primaryFallback())
-                }
-                .padding(.horizontal)
-            }
-            
-            if medicineStore.medicines.isEmpty {
-                emptyMedicinesView
-            } else {
-                recentMedicinesView
-            }
-        }
-    }
-    
-    private var recentMedicinesView: some View {
-        VStack(spacing: 10) {
-            ForEach(medicineStore.medicines.prefix(3)) { medicine in
-                medicineCardView(medicine: medicine)
-                    .onTapGesture {
-                        selectedMedicine = medicine
-                    }
-            }
-        }
-        .padding(.horizontal)
-    }
-    
-    private var emptyMedicinesView: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "pills")
-                .font(.system(size: 40))
-                .foregroundColor(.gray)
-            
-            Text("No medicines added")
-                .font(.headline)
-                .foregroundColor(.gray)
-            
-            Text("Scan a medicine barcode to add it to your collection")
-                .font(.caption)
-                .foregroundColor(.gray)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
-            
-            Button(action: {
-                showScannerSheet = true
-            }) {
-                Text("Scan Barcode")
-                    .fontWeight(.medium)
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 10)
-                    .background(AppColors.primaryFallback())
-                    .cornerRadius(8)
-            }
-            .padding(.top, 10)
-        }
-        .frame(maxWidth: .infinity)
-        .padding()
     }
     
     private var todayDosesSection: some View {
@@ -321,63 +220,6 @@ struct DashboardView: View {
     }
     
     // MARK: - Component Views
-    
-    private func summaryCard(title: String, value: String, icon: String, color: Color) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text(title)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                
-                Spacer()
-                
-                Image(systemName: icon)
-                    .foregroundColor(color)
-            }
-            
-            Text(value)
-                .font(.title)
-                .fontWeight(.bold)
-        }
-        .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
-        .frame(width: 150, height: 100)
-    }
-    
-    private func medicineCardView(medicine: Medicine) -> some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(medicine.name)
-                    .font(.headline)
-                    .foregroundColor(.primary)
-                
-                Text("Expires: \(formatDate(medicine.expirationDate))")
-                    .font(.subheadline)
-                    .foregroundColor(medicine.expirationDate < Date() ? .red : .secondary)
-            }
-            
-            Spacer()
-            
-            // Status indicator
-            if medicine.expirationDate < Date() {
-                ExpiryBadgeView(status: .expired, compact: true)
-            } else if isExpiringSoon(medicine) {
-                ExpiryBadgeView(status: .expiringSoon, compact: true)
-            } else {
-                ExpiryBadgeView(status: .valid, compact: true)
-            }
-            
-            Image(systemName: "chevron.right")
-                .foregroundColor(.secondary)
-                .font(.caption)
-        }
-        .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
-    }
     
     private func doseCardView(dose: AdherenceTrackingStore.TodayDose) -> some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -446,22 +288,10 @@ struct DashboardView: View {
     
     // MARK: - Helper Methods
     
-    private func formatDate(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .none
-        return formatter.string(from: date)
-    }
-    
     private func formatTime(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.timeStyle = .short
         return formatter.string(from: date)
-    }
-    
-    private func isExpiringSoon(_ medicine: Medicine) -> Bool {
-        let timeInterval = medicine.expirationDate.timeIntervalSince(Date())
-        return timeInterval > 0 && timeInterval < Double(medicine.alertInterval.days * 24 * 60 * 60)
     }
     
     private func handleScanResult(result: Result<String, Error>) {
@@ -515,12 +345,12 @@ struct DashboardButton: View {
     
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 15) {
+            VStack(spacing: 12) {
                 Image(systemName: icon)
-                    .font(.system(size: 30))
+                    .font(.system(size: 28))
                     .foregroundColor(iconColor)
                 
-                VStack(spacing: 4) {
+                VStack(spacing: 2) {
                     Text(title)
                         .font(.headline)
                         .foregroundColor(.primary)
@@ -529,6 +359,7 @@ struct DashboardButton: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
+                        .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -537,6 +368,204 @@ struct DashboardButton: View {
             .background(Color(.systemBackground))
             .cornerRadius(12)
             .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
+        }
+    }
+}
+
+// New Report View that includes the statistics from before
+struct ReportView: View {
+    @EnvironmentObject var medicineStore: MedicineStore
+    @EnvironmentObject var adherenceStore: AdherenceTrackingStore
+    @Environment(\.presentationMode) var presentationMode
+    
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(spacing: 20) {
+                    // Stats summary cards - moved from dashboard
+                    statsCardsSection
+                    
+                    Divider()
+                        .padding(.vertical, 5)
+                    
+                    // Adherence Chart
+                    adherenceChartSection
+                    
+                    Divider()
+                        .padding(.vertical, 5)
+                    
+                    // Medicine Type Breakdown
+                    medicineTypesSection
+                    
+                    // Export options and other report features can be added here
+                }
+                .padding()
+            }
+            .navigationTitle("Medicine Reports")
+            .navigationBarItems(trailing: Button("Done") {
+                presentationMode.wrappedValue.dismiss()
+            })
+        }
+    }
+    
+    private var statsCardsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Medicine Statistics")
+                .font(.headline)
+                .padding(.horizontal)
+            
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 15) {
+                    // Total medicines
+                    statCard(
+                        title: "Total Medicines",
+                        value: "\(medicineStore.medicines.count)",
+                        icon: "pills.fill",
+                        color: .blue
+                    )
+                    
+                    // Expired medicines
+                    statCard(
+                        title: "Expired",
+                        value: "\(medicineStore.expiredMedicines.count)",
+                        icon: "exclamationmark.circle.fill",
+                        color: .red
+                    )
+                    
+                    // Expiring soon
+                    statCard(
+                        title: "Expiring Soon",
+                        value: "\(medicineStore.expiringSoonMedicines.count)",
+                        icon: "exclamationmark.triangle.fill",
+                        color: .yellow
+                    )
+                    
+                    // Today's doses
+                    statCard(
+                        title: "Today's Doses",
+                        value: "\(adherenceStore.todayDoses.count)",
+                        icon: "calendar.badge.clock.fill",
+                        color: .green
+                    )
+                }
+            }
+        }
+    }
+    
+    private var adherenceChartSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Adherence Trends")
+                .font(.headline)
+                .padding(.horizontal)
+            
+            // Placeholder for chart - would be replaced with actual chart
+            ZStack {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color(.systemBackground))
+                    .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
+                
+                VStack {
+                    Text("Adherence Chart")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    
+                    Text("Coming Soon")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding(.top, 5)
+                }
+            }
+            .frame(height: 200)
+            .padding(.horizontal)
+        }
+    }
+    
+    private var medicineTypesSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Medicine Types")
+                .font(.headline)
+                .padding(.horizontal)
+            
+            // Placeholder for breakdown - would be replaced with actual visualization
+            ZStack {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color(.systemBackground))
+                    .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
+                
+                VStack {
+                    Text("Medicine Type Breakdown")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    
+                    Text("Coming Soon")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding(.top, 5)
+                }
+            }
+            .frame(height: 200)
+            .padding(.horizontal)
+        }
+    }
+    
+    private func statCard(title: String, value: String, icon: String, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(title)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                
+                Spacer()
+                
+                Image(systemName: icon)
+                    .foregroundColor(color)
+            }
+            
+            Text(value)
+                .font(.title)
+                .fontWeight(.bold)
+        }
+        .padding()
+        .background(Color(.systemBackground))
+        .cornerRadius(12)
+        .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
+        .frame(width: 150, height: 100)
+    }
+}
+
+// Placeholder for Refill Management
+struct RefillManagementView: View {
+    @Environment(\.presentationMode) var presentationMode
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 20) {
+                Image(systemName: "arrow.clockwise.circle")
+                    .font(.system(size: 70))
+                    .foregroundColor(.purple)
+                    .padding()
+                
+                Text("Refill Management")
+                    .font(.title)
+                    .fontWeight(.bold)
+                
+                Text("Track and manage your medicine refills")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+                
+                Spacer()
+                
+                Text("This feature is coming soon")
+                    .font(.headline)
+                    .foregroundColor(.secondary)
+            }
+            .padding()
+            .navigationTitle("Refill Management")
+            .navigationBarItems(trailing: Button("Done") {
+                presentationMode.wrappedValue.dismiss()
+            })
         }
     }
 }

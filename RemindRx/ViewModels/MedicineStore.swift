@@ -54,11 +54,85 @@ class MedicineStore: ObservableObject {
     // MARK: - Initialization
     
     init(context: NSManagedObjectContext) {
+        //self.context = context
         self.coreDataManager = CoreDataManager(context: context)
         loadMedicines()
+        // Get the shared AdherenceTrackingStore and set up listeners
+        let adherenceStore = AdherenceTrackingStore(context: context)
+        adherenceStore.setupNotificationListeners()
     }
     
     // MARK: - Public Methods
+    
+    func deleteMedicineWithCleanup(_ medicine: Medicine) {
+        print("🧹 Deleting medicine with ID \(medicine.id) and cleaning up related data")
+        
+        // First notify the AdherenceTrackingStore to clean up related schedules and doses
+        NotificationCenter.default.post(
+            name: NSNotification.Name("MedicineDeletedCleanup"),
+            object: nil,
+            userInfo: ["medicineId": medicine.id]
+        )
+        
+        // Then delete the medicine itself using standard Core Data approach
+        let managedObjectContext = PersistentContainer.shared.viewContext
+        
+        // Find the medicine entity with this ID
+        let fetchRequest: NSFetchRequest<MedicineEntity> = MedicineEntity.fetchRequest()
+        fetchRequest.predicate = NSPredicate(format: "id == %@", medicine.id as CVarArg)
+        
+        do {
+            let results = try managedObjectContext.fetch(fetchRequest)
+            
+            if let entityToDelete = results.first {
+                // Delete the entity
+                managedObjectContext.delete(entityToDelete)
+                
+                // Save changes
+                try managedObjectContext.save()
+                print("Successfully deleted medicine entity from Core Data")
+            } else {
+                print("Warning: Could not find medicine entity with ID \(medicine.id)")
+            }
+        } catch {
+            print("Error deleting medicine: \(error)")
+        }
+        
+        // Reload medicines after deletion
+        loadMedicines()
+        
+        // Notify that medicine data has changed
+        NotificationCenter.default.post(name: NSNotification.Name("MedicineDataChanged"), object: nil)
+    }
+
+    // Add this method to handle all medicines deletion with cleanup
+    func deleteAllMedicinesWithCleanup() {
+        print("🧹 Deleting ALL medicines and cleaning up related data")
+        
+        // First notify the AdherenceTrackingStore to clean up all schedules and doses
+        NotificationCenter.default.post(name: NSNotification.Name("AllMedicinesDeletedCleanup"), object: nil)
+        
+        // Delete all medicines from Core Data
+        let managedObjectContext = PersistentContainer.shared.viewContext
+        let fetchRequest: NSFetchRequest<MedicineEntity> = MedicineEntity.fetchRequest()
+        
+        do {
+            let entities = try managedObjectContext.fetch(fetchRequest)
+            for entity in entities {
+                managedObjectContext.delete(entity)
+            }
+            try managedObjectContext.save()
+            print("Successfully deleted all medicines from Core Data")
+        } catch {
+            print("Error deleting all medicines: \(error)")
+        }
+        
+        // Reload medicines after deletion
+        loadMedicines()
+        
+        // Notify that medicine data has changed
+        NotificationCenter.default.post(name: NSNotification.Name("MedicineDataChanged"), object: nil)
+    }
     
     /// Load all medicines from persistent storage
     func loadMedicines() {

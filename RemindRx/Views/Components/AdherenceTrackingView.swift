@@ -1,253 +1,476 @@
 import SwiftUI
-import Combine
 
 struct AdherenceTrackingView: View {
-    @Environment(\.presentationMode) var presentationMode
-    @Environment(\.managedObjectContext) var viewContext
     @EnvironmentObject var medicineStore: MedicineStore
-    
-    // Create a StateObject for the tracking store that won't get recreated
-    @StateObject private var trackingStore: AdherenceTrackingStore
-    
-    // UI state
+    @EnvironmentObject var adherenceStore: AdherenceTrackingStore
     @State private var selectedTab = 0
-    @State private var previousTab = 0
-    @State private var isLoading = false
-    
-    // Sheet state
-    @State private var showingAllInOneSchedulingView = false
-    @State private var showEmptyMedicinesAlert = false
-    
-    // Observers
-    @State private var medicineDeletedObserver: AnyCancellable?
-    @State private var allMedicinesDeletedObserver: AnyCancellable?
-    
-    // MARK: - Initialization
-    
-    init() {
-        print("📱 Initializing AdherenceTrackingView")
-        let context = PersistentContainer.shared.viewContext
-        
-        // Create tracking store with context
-        _trackingStore = StateObject(wrappedValue: AdherenceTrackingStore(context: context))
-    }
-    
-    // MARK: - Body
     
     var body: some View {
-        NavigationView {
-            ZStack {
-                VStack(spacing: 0) {
-                    // Modern compact tab selector - pill design
-                    HStack {
-                        Spacer()
-                        
-                        ZStack {
-                            // Background capsule
-                            Capsule()
-                                .fill(Color(.systemGray6))
-                                .frame(width: 300, height: 44)
-                                .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
-                            
-                            // Selection indicator
-                            Capsule()
-                                .fill(Color.white)
-                                .frame(width: 90, height: 36)
-                                .shadow(color: Color.black.opacity(0.1), radius: 1, x: 0, y: 1)
-                                .offset(x: selectedTab == 0 ? -98 : selectedTab == 1 ? 0 : 98)
-                                .animation(.spring(response: 0.3), value: selectedTab)
-                            
-                            // Tab buttons
-                            HStack(spacing: 0) {
-                                // Doses tab
-                                Button(action: { withAnimation { selectedTab = 0 } }) {
-                                    HStack(spacing: 6) {
-                                        Image(systemName: "pills")
-                                            .font(.system(size: 14))
-                                        Text("Doses")
-                                            .font(.system(size: 15))
-                                    }
-                                    .fontWeight(selectedTab == 0 ? .semibold : .regular)
-                                    .foregroundColor(selectedTab == 0 ? AppColors.primaryFallback() : .gray)
-                                    .frame(width: 100)
-                                    .padding(.vertical, 8)
-                                }
-                                
-                                // Schedule tab
-                                Button(action: { withAnimation { selectedTab = 1 } }) {
-                                    HStack(spacing: 6) {
-                                        Image(systemName: "calendar")
-                                            .font(.system(size: 14))
-                                        Text("Schedule")
-                                            .font(.system(size: 15))
-                                    }
-                                    .fontWeight(selectedTab == 1 ? .semibold : .regular)
-                                    .foregroundColor(selectedTab == 1 ? AppColors.primaryFallback() : .gray)
-                                    .frame(width: 100)
-                                    .padding(.vertical, 8)
-                                }
-                                
-                                // History tab
-                                Button(action: { withAnimation { selectedTab = 2 } }) {
-                                    HStack(spacing: 6) {
-                                        Image(systemName: "chart.bar")
-                                            .font(.system(size: 14))
-                                        Text("History")
-                                            .font(.system(size: 15))
-                                    }
-                                    .fontWeight(selectedTab == 2 ? .semibold : .regular)
-                                    .foregroundColor(selectedTab == 2 ? AppColors.primaryFallback() : .gray)
-                                    .frame(width: 100)
-                                    .padding(.vertical, 8)
-                                }
-                            }
+        VStack(spacing: 0) {
+            // Tab selector
+            HStack(spacing: 0) {
+                ForEach(["Schedules", "History"], id: \.self) { tab in
+                    Button(action: {
+                        withAnimation {
+                            selectedTab = tab == "Schedules" ? 0 : 1
                         }
-                        
-                        Spacer()
-                    }
-                    .padding(.vertical, 16)
-                    
-                    // Tab content
-                    TabView(selection: $selectedTab) {
-                        // Today's medications tab
-                        TodayMedicationsView(trackingStore: trackingStore)
-                            .tag(0)
-                        
-                        // Schedule management tab
-                        ScheduleManagementView(trackingStore: trackingStore)
-                            .tag(1)
-                        
-                        // Adherence history tab
-                        AdherenceHistoryView(trackingStore: trackingStore)
-                            .tag(2)
-                    }
-                    .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
-                    .onChange(of: selectedTab) { newTab in
-                        // When tab changes, refresh data
-                        if newTab != previousTab {
-                            print("Tab changed from \(previousTab) to \(newTab)")
+                    }) {
+                        VStack(spacing: 10) {
+                            Text(tab)
+                                .font(.headline)
+                                .foregroundColor(selectedTab == (tab == "Schedules" ? 0 : 1) ? .primary : .secondary)
                             
-                            // Always do a full refresh when changing tabs
-                            isLoading = true
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                                trackingStore.refreshAllData()
-                                isLoading = false
-                            }
-                            
-                            previousTab = newTab
+                            Rectangle()
+                                .fill(selectedTab == (tab == "Schedules" ? 0 : 1) ? AppColors.primaryFallback() : Color.clear)
+                                .frame(height: 3)
                         }
                     }
-                }
-                
-                // Overlay loading indicator
-                if isLoading {
-                    LoadingView()
+                    .frame(maxWidth: .infinity)
                 }
             }
-            .navigationTitle("Medication Tracking")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Close") {
-                        presentationMode.wrappedValue.dismiss()
+            .padding(.horizontal)
+            .background(Color(.systemBackground))
+            
+            Divider()
+            
+            // Tab content
+            TabView(selection: $selectedTab) {
+                // Schedules Tab
+                SchedulesTabView()
+                    .tag(0)
+                
+                // History Tab
+                HistoryTabView()
+                    .tag(1)
+            }
+            .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
+        }
+        .navigationTitle("Medication Tracking")
+        .onAppear {
+            // Ensure data is fresh
+            adherenceStore.refreshAllData()
+            adherenceStore.loadHistoryRecords()
+        }
+    }
+}
+
+struct SchedulesTabView: View {
+    @EnvironmentObject var medicineStore: MedicineStore
+    @EnvironmentObject var adherenceStore: AdherenceTrackingStore
+    @State private var showingAddScheduleForm = false
+    @State private var selectedMedicine: Medicine? = nil
+    
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                if adherenceStore.medicationSchedules.isEmpty {
+                    emptySchedulesView
+                } else {
+                    ForEach(adherenceStore.medicationSchedules) { schedule in
+                        ScheduleCard(schedule: schedule)
                     }
                 }
-                
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    if selectedTab == 1 {
+            }
+            .padding()
+        }
+        .refreshable {
+            adherenceStore.loadSchedules()
+        }
+        .sheet(isPresented: $showingAddScheduleForm) {
+            if let medicine = selectedMedicine {
+                NavigationView {
+                    ScheduleFormView(
+                        isPresented: $showingAddScheduleForm,
+                        medicine: medicine
+                    )
+                }
+            }
+        }
+    }
+    
+    private var emptySchedulesView: some View {
+        VStack(spacing: 20) {
+            Spacer()
+            
+            Image(systemName: "calendar.badge.clock")
+                .font(.system(size: 70))
+                .foregroundColor(.gray)
+                .padding()
+            
+            Text("No Medication Schedules")
+                .font(.title2)
+                .fontWeight(.semibold)
+            
+            Text("You haven't created any medication schedules yet. Add a schedule to start tracking your medications.")
+                .multilineTextAlignment(.center)
+                .foregroundColor(.secondary)
+                .padding(.horizontal)
+            
+            if !medicineStore.medicines.isEmpty {
+                Menu {
+                    ForEach(medicineStore.medicines) { medicine in
                         Button(action: {
-                            handleAddButtonPressed()
+                            selectedMedicine = medicine
+                            showingAddScheduleForm = true
                         }) {
-                            Image(systemName: "plus.circle")
+                            Text(medicine.name)
                         }
                     }
+                } label: {
+                    Text("Add Schedule")
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 10)
+                        .background(AppColors.primaryFallback())
+                        .foregroundColor(.white)
+                        .cornerRadius(8)
                 }
+                .padding(.top)
+            } else {
+                Text("Add medicines first to create schedules")
+                    .font(.callout)
+                    .foregroundColor(.secondary)
+                    .padding(.top)
             }
-            .sheet(isPresented: $showingAllInOneSchedulingView, onDismiss: {
-                // After scheduling is done, refresh data and switch to Today tab
-                isLoading = true
+            
+            Spacer()
+        }
+    }
+}
+
+struct ScheduleCard: View {
+    var schedule: MedicationSchedule
+    @EnvironmentObject var adherenceStore: AdherenceTrackingStore
+    @State private var showingEditSheet = false
+    @State private var showingDeleteAlert = false
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(schedule.medicineName)
+                    .font(.headline)
                 
-                // Force reload data after slight delay
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    trackingStore.refreshAllData()
+                Spacer()
+                
+                // Active/inactive indicator
+                Text(schedule.active ? "Active" : "Inactive")
+                    .font(.caption)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(schedule.active ? Color.green.opacity(0.2) : Color.gray.opacity(0.2))
+                    .foregroundColor(schedule.active ? .green : .gray)
+                    .cornerRadius(10)
+            }
+            
+            Divider()
+            
+            // Schedule details
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label {
+                        Text(frequencyText)
+                    } icon: {
+                        Image(systemName: "clock")
+                            .foregroundColor(.blue)
+                    }
                     
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        // Switch to Today tab
-                        selectedTab = 0
-                        isLoading = false
+                    if !schedule.timeOfDay.isEmpty {
+                        Label {
+                            Text(timesText)
+                        } icon: {
+                            Image(systemName: "alarm")
+                                .foregroundColor(.orange)
+                        }
+                    }
+                    
+                    Label {
+                        Text(dateRangeText)
+                    } icon: {
+                        Image(systemName: "calendar")
+                            .foregroundColor(.purple)
                     }
                 }
-            }) {
-                // Show our new all-in-one scheduling view
-                AllInOneSchedulingView(trackingStore: trackingStore)
-                    .environmentObject(medicineStore)
+                
+                Spacer()
             }
-            .alert("No Medicines Added", isPresented: $showEmptyMedicinesAlert) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text("Please add medicines to your collection before creating medication schedules.")
-            }
-            .onAppear {
-                print("📱 AdherenceTrackingView appeared")
-                isLoading = true
-                setupNotificationObservers()
+            
+            // Actions
+            HStack {
+                Spacer()
                 
-                // Force load medicines
-                medicineStore.loadMedicines()
+                Button(action: {
+                    showingEditSheet = true
+                }) {
+                    Label("Edit", systemImage: "pencil")
+                        .font(.caption)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(Color.blue.opacity(0.1))
+                        .foregroundColor(.blue)
+                        .cornerRadius(8)
+                }
                 
-                // Clean up any schedules for medicines that no longer exist
-                trackingStore.cleanupDeletedMedicines()
-                
-                // Load data with a brief delay to ensure view is ready
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    trackingStore.refreshAllData()
-                    isLoading = false
+                Button(action: {
+                    showingDeleteAlert = true
+                }) {
+                    Label("Delete", systemImage: "trash")
+                        .font(.caption)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(Color.red.opacity(0.1))
+                        .foregroundColor(.red)
+                        .cornerRadius(8)
                 }
             }
-            .onDisappear {
-                // Clean up observers
-                medicineDeletedObserver?.cancel()
-                allMedicinesDeletedObserver?.cancel()
-                
-                // Clear cache when view disappears
-                trackingStore.clearCache()
+        }
+        .padding()
+        .background(Color(.systemBackground))
+        .cornerRadius(12)
+        .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
+        .sheet(isPresented: $showingEditSheet) {
+            NavigationView {
+                ScheduleFormView(
+                    isPresented: $showingEditSheet,
+                    schedule: schedule
+                )
             }
+        }
+        .alert(isPresented: $showingDeleteAlert) {
+            Alert(
+                title: Text("Delete Schedule"),
+                message: Text("Are you sure you want to delete this medication schedule? This action cannot be undone."),
+                primaryButton: .destructive(Text("Delete")) {
+                    adherenceStore.deleteSchedule(schedule)
+                },
+                secondaryButton: .cancel()
+            )
         }
     }
     
-    // MARK: - Helper Methods
-    
-    private func setupNotificationObservers() {
-        // Observer for when a medicine is deleted
-        medicineDeletedObserver = NotificationCenter.default.publisher(for: .medicineDeleted)
-            .sink { notification in
-                if let medicineId = notification.object as? UUID {
-                    // Clean up schedules for this medicine
-                    let schedulesToRemove = trackingStore.medicationSchedules.filter { $0.medicineId == medicineId }
-                    for schedule in schedulesToRemove {
-                        trackingStore.deleteSchedule(schedule)
-                    }
-                }
-                
-                // Clean up anyway to be safe
-                trackingStore.cleanupDeletedMedicines()
+    private var frequencyText: String {
+        switch schedule.frequency {
+        case .daily:
+            return "Daily"
+        case .twiceDaily:
+            return "Twice Daily"
+        case .threeTimesDaily:
+            return "Three Times Daily"
+        case .weekly:
+            if let days = schedule.daysOfWeek, !days.isEmpty {
+                let dayNames = days.map { getDayName($0) }.joined(separator: ", ")
+                return "Weekly on \(dayNames)"
+            } else {
+                return "Weekly"
             }
+        case .custom:
+            if let interval = schedule.customInterval {
+                return "Every \(interval) day\(interval > 1 ? "s" : "")"
+            } else {
+                return "Custom"
+            }
+        case .asNeeded:
+            return "As Needed"
+        }
+    }
+    
+    private var timesText: String {
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
         
-        // Observer for when all medicines are deleted
-        allMedicinesDeletedObserver = NotificationCenter.default.publisher(for: .allMedicinesDeleted)
-            .sink { _ in
-                // Handle all medicines deleted
-                trackingStore.handleAllMedicinesDeleted()
-            }
+        return schedule.timeOfDay
+            .map { formatter.string(from: $0) }
+            .joined(separator: ", ")
     }
     
-    private func handleAddButtonPressed() {
-        if medicineStore.medicines.isEmpty {
-            // No medicines available
-            showEmptyMedicinesAlert = true
+    private var dateRangeText: String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        
+        let startDate = formatter.string(from: schedule.startDate)
+        if let endDate = schedule.endDate {
+            return "\(startDate) to \(formatter.string(from: endDate))"
         } else {
-            // Show the all-in-one scheduling view
-            showingAllInOneSchedulingView = true
+            return "From \(startDate)"
         }
+    }
+    
+    private func getDayName(_ day: Int) -> String {
+        let days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+        if day >= 1 && day <= 7 {
+            return days[day-1]
+        }
+        return ""
+    }
+}
+
+struct HistoryTabView: View {
+    @EnvironmentObject var adherenceStore: AdherenceTrackingStore
+    @State private var selectedPeriod: Int = 1  // 0: Today, 1: Week, 2: Month, 3: All
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Period selector
+            Picker("Time Period", selection: $selectedPeriod) {
+                Text("Today").tag(0)
+                Text("Week").tag(1)
+                Text("Month").tag(2)
+                Text("All").tag(3)
+            }
+            .pickerStyle(SegmentedPickerStyle())
+            .padding()
+            
+            if filteredHistory.isEmpty {
+                emptyHistoryView
+            } else {
+                List {
+                    ForEach(filteredHistory) { record in
+                        HistoryRecordRow(record: record)
+                    }
+                }
+                .listStyle(PlainListStyle())
+            }
+        }
+        .onAppear {
+            adherenceStore.loadHistoryRecords()
+        }
+        .refreshable {
+            adherenceStore.loadHistoryRecords()
+        }
+    }
+    
+    private var filteredHistory: [MedicationHistoryRecord] {
+        let calendar = Calendar.current
+        let now = Date()
+        
+        switch selectedPeriod {
+        case 0: // Today
+            let startOfDay = calendar.startOfDay(for: now)
+            return adherenceStore.getHistoryInRange(start: startOfDay)
+            
+        case 1: // Week
+            let weekAgo = calendar.date(byAdding: .day, value: -7, to: now) ?? now
+            return adherenceStore.getHistoryInRange(start: weekAgo)
+            
+        case 2: // Month
+            let monthAgo = calendar.date(byAdding: .month, value: -1, to: now) ?? now
+            return adherenceStore.getHistoryInRange(start: monthAgo)
+            
+        case 3: // All
+            return adherenceStore.historyRecords.sorted { $0.recordedTime > $1.recordedTime }
+            
+        default:
+            return []
+        }
+    }
+    
+    private var emptyHistoryView: some View {
+        VStack(spacing: 25) {
+            Spacer()
+            
+            Image(systemName: "clock.arrow.circlepath")
+                .font(.system(size: 70))
+                .foregroundColor(.gray)
+                .padding()
+            
+            Text("No Medication History")
+                .font(.title2)
+                .fontWeight(.semibold)
+            
+            Text("No medication records found for this time period. Take your medications using the Dosage Tracking feature to see your history here.")
+                .multilineTextAlignment(.center)
+                .foregroundColor(.secondary)
+                .padding(.horizontal)
+            
+            Spacer()
+        }
+    }
+}
+
+struct HistoryRecordRow: View {
+    var record: MedicationHistoryRecord
+    
+    var body: some View {
+        HStack(spacing: 15) {
+            // Status indicator
+            statusIcon
+            
+            // Medicine info
+            VStack(alignment: .leading, spacing: 4) {
+                Text(record.medicineName)
+                    .font(.headline)
+                
+                Text("Scheduled: \(formatDate(record.scheduledTime))")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                
+                Text("Recorded: \(formatDate(record.recordedTime))")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            
+            Spacer()
+            
+            // Time difference
+            timeDifferenceText
+        }
+        .padding(.vertical, 8)
+    }
+    
+    private var statusIcon: some View {
+        ZStack {
+            Circle()
+                .fill(statusColor.opacity(0.2))
+                .frame(width: 40, height: 40)
+            
+            Image(systemName: statusImageName)
+                .foregroundColor(statusColor)
+        }
+    }
+    
+    private var statusColor: Color {
+        switch record.status {
+        case .taken: return .green
+        case .skipped: return .orange
+        case .missed: return .red
+        }
+    }
+    
+    private var statusImageName: String {
+        switch record.status {
+        case .taken: return "checkmark.circle.fill"
+        case .skipped: return "xmark.circle.fill"
+        case .missed: return "exclamationmark.circle.fill"
+        }
+    }
+    
+    private var timeDifferenceText: some View {
+        let timeDifference = record.recordedTime.timeIntervalSince(record.scheduledTime)
+        let isLate = timeDifference > 0
+        let absTimeDifference = abs(timeDifference)
+        
+        let hours = Int(absTimeDifference) / 3600
+        let minutes = (Int(absTimeDifference) % 3600) / 60
+        
+        let timeText: String
+        if hours > 0 {
+            timeText = "\(hours)h \(minutes)m"
+        } else {
+            timeText = "\(minutes)m"
+        }
+        
+        return Text(isLate ? "\(timeText) late" : "\(timeText) early")
+            .font(.caption)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(isLate ? Color.orange.opacity(0.2) : Color.green.opacity(0.2))
+            .foregroundColor(isLate ? .orange : .green)
+            .cornerRadius(8)
+    }
+    
+    private func formatDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
     }
 }

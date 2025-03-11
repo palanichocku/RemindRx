@@ -49,6 +49,7 @@ struct ContentView: View {
     @State private var showingTestDataGenerator: Bool = false
     @State private var dashboardRefreshTrigger = UUID()
 
+
     private func refreshAllData() {
         medicineStore.loadMedicines()
     }
@@ -126,11 +127,11 @@ struct ContentView: View {
 
             // Tracking Tab
             NavigationView {
-                MedicineTrackingView()
+                InsightsView()
             }
             .tabItem {
-                Image(systemName: "chart.bar.fill")
-                Text("Tracking")
+                Image(systemName: "chart.pie.fill")
+                Text("Insights")
             }
             .tag(2)
 
@@ -143,6 +144,12 @@ struct ContentView: View {
                 Text("Settings")
             }
             .tag(3)
+            // Place the ComingSoonView at the end so it overlays everything
+            ComingSoonView(
+                isPresented: $showFeatureInDevelopment,
+                featureName: inDevelopmentFeature
+            )
+            
         }
         .accentColor(AppColors.primaryFallback())
         .onAppear {
@@ -157,6 +164,7 @@ struct ContentView: View {
                 MedicineFormView(isPresented: $showAddMedicineForm)
             }
         }
+        // In ContentView or wherever you define the showFeatureInDevelopment sheet
         .sheet(isPresented: $showFeatureInDevelopment) {
             VStack(spacing: 20) {
                 Image(systemName: "hammer.fill")
@@ -172,16 +180,34 @@ struct ContentView: View {
                     .multilineTextAlignment(.center)
                     .padding()
 
-                Button("Close") {
+                Button(action: {
+                    // Force dismiss on the main thread
+                    DispatchQueue.main.async {
+                        showFeatureInDevelopment = false
+                    }
+                }) {
+                    Text("Close")
+                        .padding(.horizontal, 40)
+                        .padding(.vertical, 12)
+                        .background(Color.blue)
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
+                }
+                .buttonStyle(PlainButtonStyle()) // Use plain style to avoid issues
+                .padding(.top, 20)
+            }
+            .padding(30)
+            .background(Color(.systemBackground))
+            .cornerRadius(16)
+            .shadow(radius: 10)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color.black.opacity(0.3).edgesIgnoringSafeArea(.all))
+            .onTapGesture {
+                // Allow dismissal by tapping outside
+                DispatchQueue.main.async {
                     showFeatureInDevelopment = false
                 }
-                .padding()
-                .background(Color.blue)
-                .foregroundColor(.white)
-                .cornerRadius(10)
-                .padding()
             }
-            .padding()
         }
         .onReceive(
             NotificationCenter.default.publisher(
@@ -190,39 +216,7 @@ struct ContentView: View {
             dashboardRefreshTrigger = UUID()
             refreshAllData()
         }
-        /*
-        #if DEBUG
-        .overlay(setupDeveloperMenu(), alignment: .bottom)
-        #endif
-        */
     }
-
-/*
-#if DEBUG
-    func setupDeveloperMenu() -> some View {
-        VStack {
-            Button(action: {
-                self.showingTestDataGenerator = true
-            }) {
-                HStack {
-                    Image(systemName: "hammer.fill")
-                    Text("Test Data Generator")
-                }
-                .padding(.vertical, 8)
-                .padding(.horizontal, 16)
-                .background(Color.purple.opacity(0.8))
-                .foregroundColor(.white)
-                .cornerRadius(8)
-            }
-            .padding(.bottom)
-        }
-        .sheet(isPresented: $showingTestDataGenerator) {
-            TestDataView()
-                .environmentObject(medicineStore)
-        }
-    }
-    #endif
- */
 }
 
 // Persistent container for Core Data - centralized for all access

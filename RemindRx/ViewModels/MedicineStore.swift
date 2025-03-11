@@ -136,9 +136,21 @@ class MedicineStore: ObservableObject {
     
     /// Load all medicines from persistent storage
     func loadMedicines() {
-        isLoading = true
-        errorMessage = nil
         
+        
+        
+        // Only set isLoading to true if we don't already have medicines loaded
+        // This avoids the loading screen when refreshing data if we already have items
+        let shouldShowLoading = medicines.isEmpty
+        
+        if shouldShowLoading {
+            // Set loading state on main thread
+            DispatchQueue.main.async {
+                self.isLoading = true
+                self.errorMessage = nil
+            }
+        }
+
         // Use background thread for potentially slow operation
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
@@ -147,39 +159,54 @@ class MedicineStore: ObservableObject {
             
             DispatchQueue.main.async {
                 self.medicines = loadedMedicines
-                self.isLoading = false
+                // Short delay before hiding loading to avoid flicker
+                if self.isLoading {
+                    // Add a tiny delay to avoid visual flicker
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        self.isLoading = false
+                    }
+                }
                 self.notifyDataChanged()
             }
         }
     }
     
     /// Save a medicine to persistent storage
+    // In MedicineStore.swift - update the save method
     func save(_ medicine: Medicine) {
-        isLoading = true
-        errorMessage = nil
+        // Set loading state on main thread
+        DispatchQueue.main.async {
+            self.isLoading = true
+            self.errorMessage = nil
+        }
         
-        // Use background thread for potentially slow operation
+        // Create a copy of the data for background work
+        let medicineCopy = medicine
+        
+        // Use background thread for Core Data operations
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
             
             // Save to Core Data
-            self.coreDataManager.saveMedicine(medicine)
+            self.coreDataManager.saveMedicine(medicineCopy)
             
-            // Schedule or update notification
-            self.notificationManager.removeNotifications(for: medicine)
-            self.notificationManager.scheduleNotification(for: medicine)
+            // Schedule notification
+            self.notificationManager.removeNotifications(for: medicineCopy)
+            self.notificationManager.scheduleNotification(for: medicineCopy)
             
-            // Update local data on main thread
+            // Update UI on main thread
             DispatchQueue.main.async {
-                // If medicine already exists, update it
-                if let index = self.medicines.firstIndex(where: { $0.id == medicine.id }) {
-                    self.medicines[index] = medicine
+                // Update local array
+                if let index = self.medicines.firstIndex(where: { $0.id == medicineCopy.id }) {
+                    self.medicines[index] = medicineCopy
                 } else {
-                    // Otherwise add it to the array
-                    self.medicines.append(medicine)
+                    self.medicines.append(medicineCopy)
                 }
                 
+                // Reset loading state
                 self.isLoading = false
+                
+                // Notify observers
                 self.notifyDataChanged()
             }
         }
@@ -280,7 +307,9 @@ class MedicineStore: ObservableObject {
     
     /// Notify observers that medicine data has changed
     private func notifyDataChanged() {
-        NotificationCenter.default.post(name: NSNotification.Name("MedicineDataChanged"), object: nil)
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: NSNotification.Name("MedicineDataChanged"), object: nil)
+        }
     }
 }
 

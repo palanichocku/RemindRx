@@ -8,6 +8,9 @@ struct MedicineListView: View {
     @State private var showAddMedicineForm = false
     @State private var showingDeleteAllConfirmation = false
     @State private var selectedMedicine: Medicine? = nil
+    @State private var isShowingTimeout = false // New state to handle loading timeout
+    @State private var refreshTrigger = UUID() // Add a refresh trigger
+    @State private var hasInitiallyLoaded = false // Track if we've done the initial load
     
     // Format date helper
     private func formatDate(_ date: Date) -> String {
@@ -30,8 +33,15 @@ struct MedicineListView: View {
                 
                 // Content based on data state
                 Group {
-                    if medicineStore.isLoading {
+                    // Only show loading on initial load and if still loading after a delay
+                    if medicineStore.isLoading && !hasInitiallyLoaded {
                         LoadingView(message: "Loading medicines...")
+                            .onAppear {
+                                // If loading takes too long, mark as loaded anyway
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                                    hasInitiallyLoaded = true
+                                }
+                            }
                     } else if medicineStore.filteredMedicines.isEmpty {
                         EmptyStateView(
                             icon: "pills",
@@ -155,8 +165,21 @@ struct MedicineListView: View {
             Text("Are you sure you want to delete all medicines? This action cannot be undone.")
         }
         .onAppear {
-            // Refresh data when view appears
-            medicineStore.loadMedicines()
+            // Reset timeout state and refresh data when view appears
+            isShowingTimeout = false
+            // Load medicines but don't show loading if we've already loaded
+            if !hasInitiallyLoaded {
+                medicineStore.loadMedicines()
+            }
+            //refreshTrigger = UUID()
+        }
+        .onDisappear {
+            // Reset the loading flag when view disappears
+            hasInitiallyLoaded = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("MedicineDataChanged"))) { _ in
+            // Force refresh when medicine data changes
+            refreshTrigger = UUID()
         }
     }
     
@@ -179,13 +202,15 @@ struct MedicineListView: View {
                             Label("Delete", systemImage: "trash")
                         }
                     }
-                    .id("medicine-\(medicine.id)")
+                    // Use a more unique ID with the refresh trigger
+                    .id("medicine-\(medicine.id)-\(refreshTrigger)")
             }
         }
         .listStyle(InsetGroupedListStyle())
         .refreshable {
             // Pull to refresh
             medicineStore.loadMedicines()
+            refreshTrigger = UUID()
         }
     }
 }
@@ -213,7 +238,7 @@ struct MedicineRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(medicine.name)
                     .font(.headline)
-                
+                // Use a Text view whose content is set in onAppear
                 Text("Expires: \(formatDate(medicine.expirationDate))")
                     .font(.subheadline)
                     .foregroundColor(isExpired ? .red : .secondary)
@@ -236,6 +261,8 @@ struct MedicineRow: View {
                 .font(.caption)
         }
         .padding(.vertical, 8)
+        // We'll use a unique ID that includes the expiration date to force updates
+        .id("medicine-row-\(medicine.id)-\(medicine.expirationDate.timeIntervalSince1970)")
     }
 }
 

@@ -14,30 +14,6 @@ struct SettingsView: View {
     
     var body: some View {
         List {
-            Section(header: Text("Data Retention")) {
-                Picker("History Retention", selection: $retentionPeriod) {
-                    ForEach(retentionOptions, id: \.self) { period in
-                        Text(period).tag(period)
-                    }
-                }
-                .onChange(of: retentionPeriod) { newValue in
-                    // Update the adherence store retention period
-                    UserDefaults.standard.set(retentionPeriod, forKey: "historyRetentionPeriod")
-                    
-                    // You'll need to convert string to days in the store
-                    let days = stringToDays(retentionPeriod)
-                    //adherenceStore.applyRetentionPolicy(days: days)
-                }
-                
-                Button(action: {
-                    // Convert current retention period to days
-                    let days = stringToDays(retentionPeriod)
-                    //adherenceStore.applyRetentionPolicy(days: days)
-                }) {
-                    Label("Clean Up Old Records", systemImage: "trash")
-                }
-                .foregroundColor(.blue)
-            }
             
             Section(header: Text("Account")) {
                 // Replace ProfileView with a placeholder for now
@@ -96,7 +72,7 @@ struct SettingsView: View {
                     Label("Terms of Service", systemImage: "doc.text")
                 }
                 
-                Link(destination: URL(string: "https://www.remindrx.com/support")!) {
+                Link(destination: URL(string: "https://plumsoftware.on.spiceworks.com")!) {
                     Label("Support", systemImage: "questionmark.circle")
                 }
             }
@@ -118,6 +94,8 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $showingTestDataGenerator) {
             TestDataView()
+                .environment(\.managedObjectContext, PersistentContainer.shared.viewContext)
+                .environmentObject(medicineStore)
         }
         .onAppear {
             // Load saved retention period

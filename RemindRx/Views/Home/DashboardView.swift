@@ -65,14 +65,8 @@ struct DashboardView: View {
                 MedicineFormView(isPresented: $showAddMedicineForm)
             }
         }
-        .alert(isPresented: $showFeatureInDevelopment) {
-            Alert(
-                title: Text("Coming Soon"),
-                message: Text(
-                    "\(inDevelopmentFeature) feature is currently under development and will be available in a future update."
-                ),
-                dismissButton: .default(Text("OK"))
-            )
+        .sheet(isPresented: $showFeatureInDevelopment) {
+            ComingSoonFeatureView(featureName: inDevelopmentFeature)
         }
         .onAppear {
             refreshAllData()

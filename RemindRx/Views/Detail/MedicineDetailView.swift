@@ -11,7 +11,6 @@ struct MedicineDetailView: View {
     @State private var isEditingExpiry = false
     @State private var editedExpirationDate: Date
     @State private var editedAlertInterval: Medicine.AlertInterval
-    @State private var showCreateScheduleSheet = false
     @State private var isSaving = false
     @State private var showSaveError = false
     @State private var saveErrorMessage = ""
@@ -56,10 +55,6 @@ struct MedicineDetailView: View {
                 // Added date
                 addedDateSection
                 
-                // Schedule section
-                //Divider()
-                //scheduleSection
-                
                 Spacer()
             }
             .padding()
@@ -92,22 +87,21 @@ struct MedicineDetailView: View {
                 dismissButton: .default(Text("OK"))
             )
         }
-        .sheet(isPresented: $showCreateScheduleSheet) {
-            NavigationView {
-                // Replace with your actual schedule creation view
-                Text("Schedule Creation View")
-                    .navigationTitle("Create Schedule")
-                    .navigationBarItems(trailing: Button("Done") {
-                        showCreateScheduleSheet = false
-                    })
-            }
-        }
         .onAppear {
             // Update with most current data when the view appears
             if let currentMedicine = medicineStore.getMedicine(byId: medicine.id) {
+                refreshMedicineData()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("MedicineDataChanged"))) { _ in
+            // Refresh local data when medicine data changes
+            if let currentMedicine = medicineStore.getMedicine(byId: medicine.id) {
                 self.medicine = currentMedicine
-                self.editedExpirationDate = currentMedicine.expirationDate
-                self.editedAlertInterval = currentMedicine.alertInterval
+                if !isEditingExpiry {
+                    // Only update editing fields if not currently editing
+                    self.editedExpirationDate = currentMedicine.expirationDate
+                    self.editedAlertInterval = currentMedicine.alertInterval
+                }
             }
         }
         .overlay(
@@ -304,39 +298,6 @@ struct MedicineDetailView: View {
         }
     }
     
-    /*
-    private var scheduleSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Text("Medication Schedule")
-                    .font(.headline)
-                
-                Spacer()
-                
-                Button(action: {
-                    showCreateScheduleSheet = true
-                }) {
-                    Text("Add Schedule")
-                        .foregroundColor(AppColors.primaryFallback())
-                }
-            }
-            
-            Text("Create reminders for taking this medication regularly")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-            
-            // Placeholder for schedule list - implement with your actual schedule display
-            Text("No schedules found")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-                .frame(maxWidth: .infinity, alignment: .center)
-                .padding()
-                .background(Color(.systemGray6))
-                .cornerRadius(10)
-        }
-    }
-     */
-    
     // MARK: - Helper Methods
     
     private var isExpired: Bool {
@@ -353,6 +314,15 @@ struct MedicineDetailView: View {
         formatter.dateStyle = .medium
         formatter.timeStyle = .none
         return formatter.string(from: date)
+    }
+    
+    // Add this method to MedicineDetailView
+    private func refreshMedicineData() {
+        if let currentMedicine = medicineStore.getMedicine(byId: medicine.id) {
+            self.medicine = currentMedicine
+            self.editedExpirationDate = currentMedicine.expirationDate
+            self.editedAlertInterval = currentMedicine.alertInterval
+        }
     }
     
     private func saveChanges() {
@@ -378,6 +348,9 @@ struct MedicineDetailView: View {
                     // Exit edit mode and hide loading indicator
                     self.isEditingExpiry = false
                     self.isSaving = false
+                    
+                    // Explicitly trigger a UI refresh
+                    NotificationCenter.default.post(name: NSNotification.Name("MedicineDataChanged"), object: nil)
                 }
             } catch {
                 // Handle error on main thread

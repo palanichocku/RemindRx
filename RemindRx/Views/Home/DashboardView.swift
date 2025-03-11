@@ -2,8 +2,6 @@ import SwiftUI
 
 struct DashboardView: View {
     @EnvironmentObject var medicineStore: MedicineStore
-    @EnvironmentObject var adherenceStore: AdherenceTrackingStore
-
     @State private var showScannerSheet = false
     @State private var showAddMedicineForm = false
     @State private var showFeatureInDevelopment = false

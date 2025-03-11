@@ -2,7 +2,6 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject var medicineStore: MedicineStore
-    @EnvironmentObject var adherenceStore: AdherenceTrackingStore
     @State private var showingLogoutConfirmation = false
     @State private var showingDeleteConfirmation = false
     @State private var showingTestDataGenerator = false
@@ -27,13 +26,13 @@ struct SettingsView: View {
                     
                     // You'll need to convert string to days in the store
                     let days = stringToDays(retentionPeriod)
-                    adherenceStore.applyRetentionPolicy(days: days)
+                    //adherenceStore.applyRetentionPolicy(days: days)
                 }
                 
                 Button(action: {
                     // Convert current retention period to days
                     let days = stringToDays(retentionPeriod)
-                    adherenceStore.applyRetentionPolicy(days: days)
+                    //adherenceStore.applyRetentionPolicy(days: days)
                 }) {
                     Label("Clean Up Old Records", systemImage: "trash")
                 }

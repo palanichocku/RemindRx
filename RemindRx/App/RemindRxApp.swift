@@ -9,24 +9,20 @@ struct RemindRxApp: App {
     
     // Environment state - centralized stores that will be available throughout the app
     @StateObject private var medicineStore: MedicineStore
-    @StateObject private var adherenceStore: AdherenceTrackingStore
     
     // Initialize state objects
     init() {
         let context = PersistentContainer.shared.viewContext
         let medStore = MedicineStore(context: context)
-        let adhStore = AdherenceTrackingStore(context: context)
         
         _medicineStore = StateObject(wrappedValue: medStore)
-        _adherenceStore = StateObject(wrappedValue: adhStore)
     }
     
     var body: some Scene {
         WindowGroup {
-            MainTabView()
+            ContentView()
                 .environment(\.managedObjectContext, PersistentContainer.shared.viewContext)
                 .environmentObject(medicineStore)
-                .environmentObject(adherenceStore)
                 .onAppear {
                     // Request notification permissions when app launches
                     UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
@@ -37,52 +33,196 @@ struct RemindRxApp: App {
                     
                     // Initial data load
                     medicineStore.loadMedicines()
-                    adherenceStore.refreshAllData()
                 }
         }
     }
 }
 
-// Main TabView that manages top-level navigation
-struct MainTabView: View {
+// Main ContentView that manages the app's main interface
+struct ContentView: View {
+    @EnvironmentObject var medicineStore: MedicineStore
     @State private var selectedTab = 0
-    
+    @State private var showScannerSheet = false
+    @State private var showAddMedicineForm = false
+    @State private var showFeatureInDevelopment = false
+    @State private var inDevelopmentFeature = ""
+    @State private var showingTestDataGenerator: Bool = false
+    @State private var dashboardRefreshTrigger = UUID()
+
+    private func refreshAllData() {
+        medicineStore.loadMedicines()
+    }
+
+    var scannerSheet: some View {
+        BarcodeScannerView(
+            onScanCompletion: { result in
+                self.showScannerSheet = false
+                switch result {
+                case .success(let barcode):
+                    medicineStore.lookupDrug(barcode: barcode) { result in
+                        DispatchQueue.main.async {
+                            switch result {
+                            case .success(let medicine):
+                                // Pre-populate form with found data
+                                self.medicineStore.draftMedicine = medicine
+                                self.showAddMedicineForm = true
+                            case .failure:
+                                // Show empty form for manual entry
+                                self.medicineStore.draftMedicine = Medicine(
+                                    name: "",
+                                    description: "",
+                                    manufacturer: "",
+                                    type: .otc,
+                                    alertInterval: .week,
+                                    expirationDate: Date().addingTimeInterval(
+                                        Double(60 * 60 * 24 * AppConstants.defaultExpirationDays)),
+                                    barcode: barcode
+                                )
+                                self.showAddMedicineForm = true
+                            }
+                        }
+                    }
+                case .failure:
+                    // Show empty form for manual entry on scan failure
+                    self.showAddMedicineForm = true
+                    self.medicineStore.draftMedicine = Medicine(
+                        name: "",
+                        description: "",
+                        manufacturer: "",
+                        type: .otc,
+                        alertInterval: .week,
+                        expirationDate: Date().addingTimeInterval(
+                            Double(60 * 60 * 24 * AppConstants.defaultExpirationDays))
+                    )
+                }
+            },
+            onCancel: {
+                self.showScannerSheet = false
+            }
+        )
+    }
+
     var body: some View {
         TabView(selection: $selectedTab) {
+            // Dashboard Tab
             NavigationView {
                 DashboardView()
             }
             .tabItem {
-                Label("Home", systemImage: "house.fill")
+                Image(systemName: "house.fill")
+                Text("Home")
             }
             .tag(0)
-            
+
+            // Medicines Tab
             NavigationView {
                 MedicineListView()
             }
             .tabItem {
-                Label("Medicines", systemImage: "pills.fill")
+                Image(systemName: "pills.fill")
+                Text("Medicines")
             }
             .tag(1)
-            
+
+            // Tracking Tab
             NavigationView {
-                AdherenceTrackingView()
+                MedicineTrackingView()
             }
             .tabItem {
-                Label("Schedule", systemImage: "calendar.badge.clock")
+                Image(systemName: "chart.bar.fill")
+                Text("Tracking")
             }
             .tag(2)
-            
+
+            // Settings Tab
             NavigationView {
                 SettingsView()
             }
             .tabItem {
-                Label("Settings", systemImage: "gear")
+                Image(systemName: "gear")
+                Text("Settings")
             }
             .tag(3)
         }
         .accentColor(AppColors.primaryFallback())
+        .onAppear {
+            dashboardRefreshTrigger = UUID()
+            refreshAllData()
+        }
+        .sheet(isPresented: $showScannerSheet) {
+            scannerSheet
+        }
+        .sheet(isPresented: $showAddMedicineForm) {
+            NavigationView {
+                MedicineFormView(isPresented: $showAddMedicineForm)
+            }
+        }
+        .sheet(isPresented: $showFeatureInDevelopment) {
+            VStack(spacing: 20) {
+                Image(systemName: "hammer.fill")
+                    .font(.system(size: 60))
+                    .foregroundColor(.orange)
+                    .padding()
+
+                Text("Coming Soon")
+                    .font(.title)
+                    .fontWeight(.bold)
+
+                Text("\(inDevelopmentFeature) feature is currently under development and will be available in a future update.")
+                    .multilineTextAlignment(.center)
+                    .padding()
+
+                Button("Close") {
+                    showFeatureInDevelopment = false
+                }
+                .padding()
+                .background(Color.blue)
+                .foregroundColor(.white)
+                .cornerRadius(10)
+                .padding()
+            }
+            .padding()
+        }
+        .onReceive(
+            NotificationCenter.default.publisher(
+                for: NSNotification.Name("MedicineDataChanged"))
+        ) { _ in
+            dashboardRefreshTrigger = UUID()
+            refreshAllData()
+        }
+        /*
+        #if DEBUG
+        .overlay(setupDeveloperMenu(), alignment: .bottom)
+        #endif
+        */
     }
+
+/*
+#if DEBUG
+    func setupDeveloperMenu() -> some View {
+        VStack {
+            Button(action: {
+                self.showingTestDataGenerator = true
+            }) {
+                HStack {
+                    Image(systemName: "hammer.fill")
+                    Text("Test Data Generator")
+                }
+                .padding(.vertical, 8)
+                .padding(.horizontal, 16)
+                .background(Color.purple.opacity(0.8))
+                .foregroundColor(.white)
+                .cornerRadius(8)
+            }
+            .padding(.bottom)
+        }
+        .sheet(isPresented: $showingTestDataGenerator) {
+            TestDataView()
+                .environmentObject(medicineStore)
+        }
+    }
+    #endif
+ */
 }
 
 // Persistent container for Core Data - centralized for all access

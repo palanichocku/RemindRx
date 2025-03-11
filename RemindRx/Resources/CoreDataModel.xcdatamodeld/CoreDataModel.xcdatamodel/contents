@@ -1,23 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="23507" systemVersion="23G93" minimumToolsVersion="Automatic" sourceLanguage="Swift" usedWithSwiftData="YES" userDefinedModelVersionIdentifier="">
-    <entity name="DoseEntity" representedClassName="DoseEntity" syncable="YES" codeGenerationType="class">
-        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
-        <attribute name="medicineId" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
-        <attribute name="medicineName" optional="YES" attributeType="String"/>
-        <attribute name="notes" optional="YES" attributeType="String"/>
-        <attribute name="skippedReason" optional="YES" attributeType="String"/>
-        <attribute name="taken" optional="YES" attributeType="Boolean" usesScalarValueType="YES"/>
-        <attribute name="timestamp" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
-    </entity>
-    <entity name="HistoryRecordEntity" representedClassName="HistoryRecordEntity" syncable="YES" codeGenerationType="class">
-        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
-        <attribute name="medicineId" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
-        <attribute name="medicineName" optional="YES" attributeType="String"/>
-        <attribute name="notes" optional="YES" attributeType="String"/>
-        <attribute name="recordedTime" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
-        <attribute name="scheduledTime" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
-        <attribute name="status" optional="YES" attributeType="String"/>
-    </entity>
     <entity name="MedicineEntity" representedClassName="MedicineEntity" syncable="YES" codeGenerationType="class">
         <attribute name="alertInterval" attributeType="String" defaultValueString="week"/>
         <attribute name="barcode" attributeType="String"/>
@@ -29,18 +11,5 @@
         <attribute name="name" attributeType="String"/>
         <attribute name="source" optional="YES" attributeType="String"/>
         <attribute name="type" optional="YES" attributeType="String" defaultValueString="otc"/>
-    </entity>
-    <entity name="ScheduleEntity" representedClassName="ScheduleEntity" syncable="YES" codeGenerationType="class">
-        <attribute name="active" optional="YES" attributeType="Boolean" usesScalarValueType="YES"/>
-        <attribute name="customInterval" optional="YES" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
-        <attribute name="daysOfWeekData" optional="YES" attributeType="Binary"/>
-        <attribute name="endDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
-        <attribute name="frequency" optional="YES" attributeType="String"/>
-        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
-        <attribute name="medicineId" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
-        <attribute name="medicineName" optional="YES" attributeType="String"/>
-        <attribute name="notes" optional="YES" attributeType="String"/>
-        <attribute name="startDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
-        <attribute name="timeOfDayData" optional="YES" attributeType="Binary"/>
     </entity>
 </model>

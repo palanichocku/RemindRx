@@ -58,8 +58,8 @@ class MedicineStore: ObservableObject {
         self.coreDataManager = CoreDataManager(context: context)
         loadMedicines()
         // Get the shared AdherenceTrackingStore and set up listeners
-        let adherenceStore = AdherenceTrackingStore(context: context)
-        adherenceStore.setupNotificationListeners()
+        //let adherenceStore = AdherenceTrackingStore(context: context)
+        //adherenceStore.setupNotificationListeners()
     }
     
     // MARK: - Public Methods

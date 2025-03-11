@@ -66,10 +66,10 @@ struct MainTabView: View {
             .tag(1)
             
             NavigationView {
-                MedicationTrackingView()
+                AdherenceTrackingView()
             }
             .tabItem {
-                Label("Tracking", systemImage: "chart.bar.fill")
+                Label("Schedule", systemImage: "calendar.badge.clock")
             }
             .tag(2)
             

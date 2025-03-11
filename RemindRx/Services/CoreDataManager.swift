@@ -28,20 +28,17 @@ public class CoreDataManager {
     }
     
     func saveHistoryRecord(_ record: MedicationHistoryRecord) {
-        // Check if we already have this record
+        // Create or update entity
         let fetchRequest: NSFetchRequest<HistoryRecordEntity> = HistoryRecordEntity.fetchRequest()
         fetchRequest.predicate = NSPredicate(format: "id == %@", record.id as CVarArg)
         
         do {
             let results = try context.fetch(fetchRequest)
-            
             let entity: HistoryRecordEntity
             
-            if let existingEntity = results.first {
-                // Update existing
-                entity = existingEntity
+            if let existing = results.first {
+                entity = existing
             } else {
-                // Create new
                 entity = HistoryRecordEntity(context: context)
                 entity.id = record.id
             }
@@ -54,20 +51,19 @@ public class CoreDataManager {
             entity.status = record.status.rawValue
             entity.notes = record.notes
             
-            // Save
             try context.save()
         } catch {
             print("Error saving history record: \(error)")
         }
     }
-    
+
     func fetchAllHistoryRecords() -> [MedicationHistoryRecord] {
         let fetchRequest: NSFetchRequest<HistoryRecordEntity> = HistoryRecordEntity.fetchRequest()
         
         do {
-            let results = try context.fetch(fetchRequest)
+            let entities = try context.fetch(fetchRequest)
             
-            return results.compactMap { entity -> MedicationHistoryRecord? in
+            return entities.compactMap { entity -> MedicationHistoryRecord? in
                 guard let id = entity.id,
                       let medicineId = entity.medicineId,
                       let medicineName = entity.medicineName,
@@ -93,21 +89,21 @@ public class CoreDataManager {
             return []
         }
     }
-    
+
     func deleteHistoryRecordsBeforeDate(_ date: Date) {
-        // This should be adjusted to match your Core Data entity name if different
-        let fetchRequest = NSFetchRequest<NSFetchRequestResult>(entityName: "HistoryRecordEntity")
+        let fetchRequest: NSFetchRequest<HistoryRecordEntity> = HistoryRecordEntity.fetchRequest()
         fetchRequest.predicate = NSPredicate(format: "recordedTime < %@", date as NSDate)
         
-        // Use batch delete request for efficiency with large datasets
-        let deleteRequest = NSBatchDeleteRequest(fetchRequest: fetchRequest)
-        
         do {
-            try context.execute(deleteRequest)
+            let records = try context.fetch(fetchRequest)
+            
+            for record in records {
+                context.delete(record)
+            }
+            
             try context.save()
-            print("Successfully deleted old history records from Core Data")
         } catch {
-            print("Error deleting history records: \(error)")
+            print("Error deleting old history records: \(error)")
         }
     }
     

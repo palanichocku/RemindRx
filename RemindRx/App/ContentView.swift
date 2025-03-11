@@ -2,26 +2,22 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject var medicineStore: MedicineStore
-    @EnvironmentObject var adherenceStore: AdherenceTrackingStore
     @State public var selectedTab = 0
     @State public var showScannerSheet = false
     @State public var showAddMedicineForm = false
-    @State public var showTrackingView = false
-    @State public var showReportView = false
-    @State public var showRefillView = false
     @State public var showFeatureInDevelopment = false
     @State public var inDevelopmentFeature = ""
     @State public var showingTestDataGenerator: Bool = false
-    
+    // Adding this line to force compilation
+
     // Add refresh state
     @State private var dashboardRefreshTrigger = UUID()
-    
+
     private func refreshAllData() {
         // Force a refresh of all data
         medicineStore.loadMedicines()
-        adherenceStore.refreshAllData()
     }
-    
+
     var scannerSheet: some View {
         BarcodeScannerView(
             onScanCompletion: { result in
@@ -43,10 +39,14 @@ struct ContentView: View {
                                     manufacturer: "",
                                     type: .otc,
                                     alertInterval: .week,
-                                    expirationDate: Date().addingTimeInterval(Double(60*60*24*AppConstants.defaultExpirationDays)),
+                                    expirationDate: Date().addingTimeInterval(
+                                        Double(
+                                            60 * 60 * 24
+                                                * AppConstants
+                                                .defaultExpirationDays)),
                                     barcode: barcode
                                 )
-                                
+
                                 self.showAddMedicineForm = true
                             }
                         }
@@ -60,7 +60,10 @@ struct ContentView: View {
                         manufacturer: "",
                         type: .otc,
                         alertInterval: .week,
-                        expirationDate: Date().addingTimeInterval(Double(60*60*24*AppConstants.defaultExpirationDays))
+                        expirationDate: Date().addingTimeInterval(
+                            Double(
+                                60 * 60 * 24
+                                    * AppConstants.defaultExpirationDays))
                     )
                 }
             },
@@ -69,7 +72,7 @@ struct ContentView: View {
             }
         )
     }
-    
+
     var body: some View {
         TabView(selection: $selectedTab) {
             // Dashboard Tab
@@ -78,37 +81,37 @@ struct ContentView: View {
             }
             .tabItem {
                 Image(systemName: "house.fill")
-                Text("Home")
+                Text("Home_")
             }
             .tag(0)
-            
+
             // Medicines Tab
             NavigationView {
                 MedicineListView()
             }
             .tabItem {
                 Image(systemName: "pills.fill")
-                Text("Medicines")
+                Text("Medicines_")
             }
             .tag(1)
-            
-            // Tracking Tab
+
+            // New Tracking Tab
             NavigationView {
-                AdherenceTrackingView()
+                MedicineTrackingView()
             }
             .tabItem {
-                Image(systemName: "checkmark.circle.fill")
-                Text("Tracking")
+                Image(systemName: "chart.bar.fill")
+                Text("Tracking_")
             }
             .tag(2)
-            
+
             // Settings Tab
             NavigationView {
                 SettingsView()
             }
             .tabItem {
                 Image(systemName: "gear")
-                Text("Settings")
+                Text("Settings_")
             }
             .tag(3)
         }
@@ -124,40 +127,69 @@ struct ContentView: View {
         .sheet(isPresented: $showAddMedicineForm) {
             MedicineFormView(isPresented: $showAddMedicineForm)
         }
-        .sheet(isPresented: $showTrackingView) {
-            DosageTrackingView()
-        }
-        .sheet(isPresented: $showReportView) {
-            ReportView()
-        }
-        .sheet(isPresented: $showRefillView) {
-            RefillManagementView()
-        }
-        .alert(isPresented: $showFeatureInDevelopment) {
-            Alert(
-                title: Text("Coming Soon"),
-                message: Text("\(inDevelopmentFeature) feature is currently under development and will be available in a future update."),
-                dismissButton: .default(Text("OK"))
-            )
+        .sheet(isPresented: $showFeatureInDevelopment) {
+            VStack(spacing: 20) {
+                Image(systemName: "hammer.fill")
+                    .font(.system(size: 60))
+                    .foregroundColor(.orange)
+                    .padding()
+
+                Text("Coming Soon")
+                    .font(.title)
+                    .fontWeight(.bold)
+
+                Text(
+                    "\(inDevelopmentFeature) feature is currently under development and will be available in a future update."
+                )
+                .multilineTextAlignment(.center)
+                .padding()
+
+                Button("Close") {
+                    showFeatureInDevelopment = false
+                }
+                .padding()
+                .background(Color.blue)
+                .foregroundColor(.white)
+                .cornerRadius(10)
+                .padding()
+            }
+            .padding()
         }
         // Listen for data change notifications
-        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("MedicineDataChanged"))) { _ in
+        .onReceive(
+            NotificationCenter.default.publisher(
+                for: NSNotification.Name("MedicineDataChanged"))
+        ) { _ in
             // Update dashboard when data changes
             dashboardRefreshTrigger = UUID()
             refreshAllData()
         }
     }
-}
 
-struct ContentView_Previews: PreviewProvider {
-    static var previews: some View {
-        let context = PersistentContainer.shared.viewContext
-        let medicineStore = MedicineStore(context: context)
-        let adherenceStore = AdherenceTrackingStore(context: context)
-        
-        ContentView()
-            .environment(\.managedObjectContext, context)
-            .environmentObject(medicineStore)
-            .environmentObject(adherenceStore)
-    }
+    #if DEBUG
+        func setupDeveloperMenu() -> some View {
+            VStack {
+                #if DEBUG
+                    Button(action: {
+                        self.showingTestDataGenerator = true
+                    }) {
+                        HStack {
+                            Image(systemName: "hammer.fill")
+                            Text("Test Data Generator")
+                        }
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 16)
+                        .background(Color.purple.opacity(0.8))
+                        .foregroundColor(.white)
+                        .cornerRadius(8)
+                    }
+                    .padding(.bottom)
+                #endif
+            }
+            .sheet(isPresented: $showingTestDataGenerator) {
+                TestDataView()
+                    .environmentObject(medicineStore)
+            }
+        }
+    #endif
 }

@@ -192,6 +192,12 @@ struct ScheduleFormView: View {
             .disabled(!isFormValid)
         )
         .onAppear {
+            print("ScheduleFormView appeared")
+            print("Editing mode: \(schedule != nil)")
+            if let schedule = schedule {
+                print("Schedule ID: \(schedule.id)")
+                print("Medicine: \(schedule.medicineName)")
+            }
             loadScheduleData()
         }
         .alert(isPresented: $showingDiscardAlert) {
@@ -413,8 +419,17 @@ struct ScheduleFormView: View {
             adherenceStore.addSchedule(validatedSchedule)
         }
         
-        // Force rebuild of today's doses
-        adherenceStore.refreshAllData()
+        // Dismiss the form first before any heavy data operations
+            isPresented = false
+            
+            // Then do a lighter refresh on a background thread
+            DispatchQueue.global(qos: .userInitiated).async {
+                // Light refresh only
+                DispatchQueue.main.async {
+                    // Notify UI of changes
+                    self.adherenceStore.objectWillChange.send()
+                }
+            }
     }
 }
 

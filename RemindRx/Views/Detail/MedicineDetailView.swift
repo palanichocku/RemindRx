@@ -57,8 +57,8 @@ struct MedicineDetailView: View {
                 addedDateSection
                 
                 // Schedule section
-                Divider()
-                scheduleSection
+                //Divider()
+                //scheduleSection
                 
                 Spacer()
             }
@@ -304,6 +304,7 @@ struct MedicineDetailView: View {
         }
     }
     
+    /*
     private var scheduleSection: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
@@ -334,6 +335,7 @@ struct MedicineDetailView: View {
                 .cornerRadius(10)
         }
     }
+     */
     
     // MARK: - Helper Methods
     

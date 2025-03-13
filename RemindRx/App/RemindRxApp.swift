@@ -145,8 +145,8 @@ struct ContentView: View {
             }
             .tag(3)
             // Place the ComingSoonView at the end so it overlays everything
-            ComingSoonView(
-                isPresented: $showFeatureInDevelopment,
+            ComingSoonFeatureView(
+                //isPresented: $showFeatureInDevelopment,
                 featureName: inDevelopmentFeature
             )
             

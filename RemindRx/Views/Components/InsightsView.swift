@@ -6,7 +6,7 @@ struct InsightsView: View {
     @State private var selectedTab = 0
     @State private var refreshTrigger = UUID() // To force refresh when needed
     
-    private let tabTitles = ["Overview", "Expiration", "Shopping List"]
+    private let tabTitles = ["Overview", "Expiration", "Restock"]
     
     var body: some View {
         VStack(spacing: 0) {
@@ -46,8 +46,8 @@ struct InsightsView: View {
                 ExpirationCalendarView()
                     .tag(1)
                 
-                // Shopping List Tab
-                ShoppingListView()
+                // Restock List Tab
+                RestockView()
                     .tag(2)
             }
             .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))

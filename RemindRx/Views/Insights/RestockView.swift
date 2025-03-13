@@ -6,20 +6,20 @@
 //
 import SwiftUI
 
-struct ShoppingListView: View {
+struct RestockView: View {
     @EnvironmentObject var medicineStore: MedicineStore
     @State private var showOnlyExpired = false
     
     var body: some View {
         ZStack {
-            if shoppingItems.isEmpty {
+            if restockItems.isEmpty {
                 VStack(spacing: 20) {
                     Image(systemName: "cart")
                         .font(.system(size: 60))
                         .foregroundColor(.gray.opacity(0.5))
                     
                     Text(medicineStore.medicines.isEmpty
-                        ? "Add medicines to generate a shopping list"
+                        ? "Add medicines to generate a Restock list"
                         : "No medicines need replacement")
                         .foregroundColor(.gray)
                         .multilineTextAlignment(.center)
@@ -33,8 +33,8 @@ struct ShoppingListView: View {
                         .padding(.vertical, 8)
                     
                     List {
-                        ForEach(shoppingItems) { item in
-                            ShoppingItemRow(item: item)
+                        ForEach(restockItems) { item in
+                            RestockItemRow(item: item)
                         }
                     }
                     .listStyle(InsetGroupedListStyle())
@@ -43,7 +43,7 @@ struct ShoppingListView: View {
         }
     }
     
-    private var shoppingItems: [Medicine] {
+    private var restockItems: [Medicine] {
         if showOnlyExpired {
             return medicineStore.expiredMedicines
         } else {
@@ -52,7 +52,7 @@ struct ShoppingListView: View {
     }
 }
 
-struct ShoppingItemRow: View {
+struct RestockItemRow: View {
     let item: Medicine
     
     var body: some View {

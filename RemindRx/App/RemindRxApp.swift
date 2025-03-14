@@ -38,12 +38,12 @@ struct RemindRxApp: App {
     }
 }
 
-// Main ContentView that manages the app's main interface
 struct ContentView: View {
     @EnvironmentObject var medicineStore: MedicineStore
     @State private var selectedTab = 0
     @State private var showScannerSheet = false
     @State private var showAddMedicineForm = false
+    @State private var showOCRCamera = false
     @State private var showFeatureInDevelopment = false
     @State private var inDevelopmentFeature = ""
     @State private var showingTestDataGenerator: Bool = false
@@ -58,49 +58,18 @@ struct ContentView: View {
         BarcodeScannerView(
             onScanCompletion: { result in
                 self.showScannerSheet = false
-                switch result {
-                case .success(let barcode):
-                    medicineStore.lookupDrug(barcode: barcode) { result in
-                        DispatchQueue.main.async {
-                            switch result {
-                            case .success(let medicine):
-                                // Pre-populate form with found data
-                                self.medicineStore.draftMedicine = medicine
-                                self.showAddMedicineForm = true
-                            case .failure:
-                                // Show empty form for manual entry
-                                self.medicineStore.draftMedicine = Medicine(
-                                    name: "",
-                                    description: "",
-                                    manufacturer: "",
-                                    type: .otc,
-                                    alertInterval: .week,
-                                    expirationDate: Date().addingTimeInterval(
-                                        Double(60 * 60 * 24 * AppConstants.defaultExpirationDays)),
-                                    barcode: barcode
-                                )
-                                self.showAddMedicineForm = true
-                            }
-                        }
-                    }
-                case .failure:
-                    // Show empty form for manual entry on scan failure
-                    self.showAddMedicineForm = true
-                    self.medicineStore.draftMedicine = Medicine(
-                        name: "",
-                        description: "",
-                        manufacturer: "",
-                        type: .otc,
-                        alertInterval: .week,
-                        expirationDate: Date().addingTimeInterval(
-                            Double(60 * 60 * 24 * AppConstants.defaultExpirationDays))
-                    )
-                }
+                handleScanResult(result: result)
             },
             onCancel: {
                 self.showScannerSheet = false
             }
         )
+    }
+    
+    var ocrCameraSheet: some View {
+        OCRCameraView { result in
+            handleOCRResult(result)
+        }
     }
 
     var body: some View {
@@ -125,7 +94,7 @@ struct ContentView: View {
             }
             .tag(1)
 
-            // Tracking Tab
+            // Insights Tab
             NavigationView {
                 InsightsView()
             }
@@ -144,17 +113,17 @@ struct ContentView: View {
                 Text("Settings")
             }
             .tag(3)
-            // Place the ComingSoonView at the end so it overlays everything
-            ComingSoonFeatureView(
-                //isPresented: $showFeatureInDevelopment,
-                featureName: inDevelopmentFeature
-            )
-            
         }
         .accentColor(AppColors.primaryFallback())
         .onAppear {
             dashboardRefreshTrigger = UUID()
             refreshAllData()
+            
+            // Fix for uneven tab bar spacing - make sure the tab bar items are properly configured
+            let appearance = UITabBarAppearance()
+            appearance.configureWithDefaultBackground()
+            UITabBar.appearance().standardAppearance = appearance
+            UITabBar.appearance().scrollEdgeAppearance = appearance
         }
         .sheet(isPresented: $showScannerSheet) {
             scannerSheet
@@ -164,50 +133,11 @@ struct ContentView: View {
                 MedicineFormView(isPresented: $showAddMedicineForm)
             }
         }
-        // In ContentView or wherever you define the showFeatureInDevelopment sheet
+        .sheet(isPresented: $showOCRCamera) {
+            ocrCameraSheet
+        }
         .sheet(isPresented: $showFeatureInDevelopment) {
-            VStack(spacing: 20) {
-                Image(systemName: "hammer.fill")
-                    .font(.system(size: 60))
-                    .foregroundColor(.orange)
-                    .padding()
-
-                Text("Coming Soon")
-                    .font(.title)
-                    .fontWeight(.bold)
-
-                Text("\(inDevelopmentFeature) feature is currently under development and will be available in a future update.")
-                    .multilineTextAlignment(.center)
-                    .padding()
-
-                Button(action: {
-                    // Force dismiss on the main thread
-                    DispatchQueue.main.async {
-                        showFeatureInDevelopment = false
-                    }
-                }) {
-                    Text("Close")
-                        .padding(.horizontal, 40)
-                        .padding(.vertical, 12)
-                        .background(Color.blue)
-                        .foregroundColor(.white)
-                        .cornerRadius(10)
-                }
-                .buttonStyle(PlainButtonStyle()) // Use plain style to avoid issues
-                .padding(.top, 20)
-            }
-            .padding(30)
-            .background(Color(.systemBackground))
-            .cornerRadius(16)
-            .shadow(radius: 10)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color.black.opacity(0.3).edgesIgnoringSafeArea(.all))
-            .onTapGesture {
-                // Allow dismissal by tapping outside
-                DispatchQueue.main.async {
-                    showFeatureInDevelopment = false
-                }
-            }
+            ComingSoonFeatureView(featureName: inDevelopmentFeature)
         }
         .onReceive(
             NotificationCenter.default.publisher(
@@ -216,6 +146,64 @@ struct ContentView: View {
             dashboardRefreshTrigger = UUID()
             refreshAllData()
         }
+    }
+    
+    private func handleScanResult(result: Result<String, Error>) {
+        switch result {
+        case .success(let barcode):
+            medicineStore.lookupDrug(barcode: barcode) { result in
+                DispatchQueue.main.async {
+                    switch result {
+                    case .success(let medicine):
+                        // Pre-populate form with found data
+                        medicineStore.draftMedicine = medicine
+                        showAddMedicineForm = true
+                    case .failure:
+                        // Show empty form for manual entry
+                        medicineStore.draftMedicine = Medicine(
+                            name: "",
+                            description: "",
+                            manufacturer: "",
+                            type: .otc,
+                            alertInterval: .week,
+                            expirationDate: Date().addingTimeInterval(
+                                Double(60 * 60 * 24 * AppConstants.defaultExpirationDays)),
+                            barcode: barcode
+                        )
+                        showAddMedicineForm = true
+                    }
+                }
+            }
+        case .failure:
+            // Show empty form for manual entry on scan failure
+            medicineStore.draftMedicine = Medicine(
+                name: "",
+                description: "",
+                manufacturer: "",
+                type: .otc,
+                alertInterval: .week,
+                expirationDate: Date().addingTimeInterval(
+                    Double(60 * 60 * 24 * AppConstants.defaultExpirationDays))
+            )
+            showAddMedicineForm = true
+        }
+    }
+    
+    private func handleOCRResult(_ result: OCRResult) {
+        // Create a pre-filled medicine based on OCR results
+        medicineStore.draftMedicine = Medicine(
+            name: result.name,
+            description: result.description,
+            manufacturer: result.manufacturer,
+            type: result.isPrescription ? .prescription : .otc,
+            alertInterval: .week, // Default alert interval
+            expirationDate: result.expirationDate ?? Date().addingTimeInterval(60 * 60 * 24 * 90),
+            barcode: result.barcode,
+            source: "OCR Capture"
+        )
+        
+        // Show the form for editing/confirmation
+        showAddMedicineForm = true
     }
 }
 

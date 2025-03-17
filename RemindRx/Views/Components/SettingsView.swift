@@ -15,6 +15,7 @@ struct SettingsView: View {
     @State private var isNotificationsEnabled = true
     @State private var emailResult: Result<MFMailComposeResult, Error>? = nil
     @State private var isShowingEmailSheet = false
+    @StateObject private var onboardingCoordinator = OnboardingCoordinator()
     
     // Use a string for the retention period since we can't find the enum
     @State private var retentionPeriod: String = "6 Months"
@@ -31,23 +32,16 @@ struct SettingsView: View {
                         updateNotificationSettings(enabled: newValue)
                     }
             }
-            
-            // Account Section
-            Section(header: Text("Account")) {
+            Section(header: Text("Help")) {
                 Button(action: {
-                    // Show profile settings (placeholder)
+                    onboardingCoordinator.shouldShowOnboarding = true
+                    onboardingCoordinator.resetOnboarding()
+                    // This might help force a UI update
+                    onboardingCoordinator.objectWillChange.send()
                 }) {
-                    Label("Profile Settings", systemImage: "person.crop.circle")
-                }
-                
-                Button(action: {
-                    showingLogoutConfirmation = true
-                }) {
-                    Label("Log Out", systemImage: "arrow.right.square")
-                        .foregroundColor(.red)
+                    Label("Show Onboarding Guide Again", systemImage: "book")
                 }
             }
-            
             // Data Management Section
             Section(header: Text("Data Management")) {
                 Button(action: {

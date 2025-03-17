@@ -9,13 +9,48 @@ struct DashboardView: View {
     @State private var inDevelopmentFeature = ""
     @State private var selectedMedicine: Medicine? = nil
     @State private var showOCRWarning = false
+    @State private var showingScanningTip = !UserDefaults.standard.bool(forKey: "hasDismissedScanningTip")
+    //@State private var showingScanningTip = !UserDefaults.standard.bool(forKey: "hasDismissedScanningTip")
 
     private func refreshAllData() {
         medicineStore.loadMedicines()
     }
-
+    
     var body: some View {
         ScrollView {
+            
+            if showingScanningTip {
+                QuickTipView(
+                    iconName: "barcode.viewfinder",
+                    title: "Remember: Barcode Scanning is Recommended",
+                    message: "For best results, use the Scan button first. If the barcode isn't available or recognized, try OCR or manual entry as backup methods.",
+                    actionTitle: "Show Me How",
+                    action: {
+                        // Add actual functionality here
+                        // For example, you could show a brief tutorial or highlight the scan button
+                        
+                        // Simple approach: show an alert with more detailed instructions
+                        let alert = UIAlertController(
+                            title: "How to Scan Medicines",
+                            message: "1. Tap the 'Scan' button\n2. Position your camera so the barcode is within the scanning frame\n3. Hold steady until the barcode is detected\n\nIf scanning fails, try the OCR button to capture text from the package, or add medicine details manually.",
+                            preferredStyle: .alert
+                        )
+                        alert.addAction(UIAlertAction(title: "Got it", style: .default))
+                        
+                        // Present the alert
+                        UIApplication.shared.windows.first?.rootViewController?.present(alert, animated: true)
+                    },
+                    dismissAction: {
+                        showingScanningTip = false
+                        
+                        // Optionally, save this preference so the tip stays dismissed
+                        UserDefaults.standard.set(true, forKey: "hasDismissedScanningTip")
+                    }
+                )
+                .padding(.horizontal)
+                .padding(.top, 10)
+            }
+            
             VStack(spacing: 20) {
                 // Header
                 HStack {
@@ -52,12 +87,11 @@ struct DashboardView: View {
                             GridItem(.flexible()),
                             GridItem(.flexible()),
                             GridItem(.flexible()),
-                        ], spacing: 20
+                        ], spacing: 12
                     ) {
                         // Scan button
                         DashboardButton(
                             title: "Scan",
-                            description: "Scan medicine barcode",
                             icon: "barcode.viewfinder",
                             iconColor: .blue,
                             action: {
@@ -68,7 +102,6 @@ struct DashboardView: View {
                         // OCR button
                         DashboardButton(
                             title: "OCR",
-                            description: "Capture with camera",
                             icon: "text.viewfinder",
                             iconColor: .orange,
                             action: {
@@ -79,7 +112,6 @@ struct DashboardView: View {
                         // Add manually button
                         DashboardButton(
                             title: "Add",
-                            description: "Add medicine manually",
                             icon: "plus.circle",
                             iconColor: .indigo,
                             action: {
@@ -113,12 +145,11 @@ struct DashboardView: View {
                         columns: [
                             GridItem(.flexible()),
                             GridItem(.flexible()),
-                        ], spacing: 20
+                        ], spacing: 12
                     ) {
                         // Schedule button - Coming Soon
                         DashboardButton(
                             title: "Schedule",
-                            description: "Medicine schedules",
                             icon: "calendar.badge.clock",
                             iconColor: .green,
                             action: {
@@ -130,7 +161,6 @@ struct DashboardView: View {
                         // Refill button - Coming Soon
                         DashboardButton(
                             title: "Refill",
-                            description: "Manage medication refills",
                             icon: "arrow.clockwise.circle",
                             iconColor: .purple,
                             action: {
@@ -164,7 +194,8 @@ struct DashboardView: View {
             )
         }
         .sheet(isPresented: $showTwoStepOCR) {
-            TwoStepOCRView { result in
+                // Use the fixed version instead
+                DirectTwoStepOCRView { result in
                 handleOCRResult(result)
             }
         }
@@ -178,7 +209,10 @@ struct DashboardView: View {
         }
         .alert("OCR Capture Information", isPresented: $showOCRWarning) {
             Button("Continue", role: .none) {
-                showTwoStepOCR = true
+            // Set a small delay to ensure alert is dismissed first
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    showTwoStepOCR = true
+                }
             }
             Button("Cancel", role: .cancel) {
                 // Do nothing
@@ -250,54 +284,49 @@ struct DashboardView: View {
     
     private func handleOCRResult(_ result: OCRResult) {
         // Create a pre-filled medicine based on OCR results
-        let medicine = Medicine(
+        medicineStore.draftMedicine = Medicine(
             name: result.name,
             description: result.description,
             manufacturer: result.manufacturer,
             type: result.isPrescription ? .prescription : .otc,
             alertInterval: .week, // Default alert interval
             expirationDate: result.expirationDate ?? Date().addingTimeInterval(60 * 60 * 24 * 90),
-            dateAdded: Date(),
             barcode: result.barcode,
             source: "OCR Capture"
         )
         
-        // Set as draft medicine and show form
-        medicineStore.draftMedicine = medicine
+        // Show the form for editing/confirmation
         showAddMedicineForm = true
     }
 }
 
 // Simple design for dashboard buttons
+// Updated DashboardButton with no descriptions and square-like appearance
+
 struct DashboardButton: View {
     let title: String
-    let description: String
     let icon: String
     let iconColor: Color
     let action: () -> Void
-
+    
     var body: some View {
         Button(action: action) {
             VStack(spacing: 12) {
+                // Icon
                 Image(systemName: icon)
                     .font(.system(size: 28))
                     .foregroundColor(iconColor)
-
-                VStack(spacing: 2) {
-                    Text(title)
-                        .font(.headline)
-                        .foregroundColor(.primary)
-
-                    Text(description)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                    .frame(height: 36) // Fixed height for icon
+                
+                // Title only (no description)
+                Text(title)
+                    .font(.headline)
+                    .foregroundColor(.primary)
             }
             .frame(maxWidth: .infinity)
-            .padding()
+            .frame(height: 100) // Fixed height for square-like appearance
+            .padding(.vertical, 16)
+            .padding(.horizontal, 8)
             .background(Color(.systemBackground))
             .cornerRadius(12)
             .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)

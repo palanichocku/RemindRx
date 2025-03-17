@@ -9,6 +9,7 @@ struct RemindRxApp: App {
     
     // Environment state - centralized stores that will be available throughout the app
     @StateObject private var medicineStore: MedicineStore
+    @StateObject private var onboardingCoordinator = OnboardingCoordinator()
     
     // Initialize state objects
     init() {
@@ -22,6 +23,7 @@ struct RemindRxApp: App {
         WindowGroup {
             ContentView()
                 .environment(\.managedObjectContext, PersistentContainer.shared.viewContext)
+                .environmentObject(onboardingCoordinator)
                 .environmentObject(medicineStore)
                 .onAppear {
                     // Request notification permissions when app launches
@@ -48,7 +50,8 @@ struct ContentView: View {
     @State private var inDevelopmentFeature = ""
     @State private var showingTestDataGenerator: Bool = false
     @State private var dashboardRefreshTrigger = UUID()
-
+    @State private var onboardingCoordinator = OnboardingCoordinator()
+    
 
     private func refreshAllData() {
         medicineStore.loadMedicines()
@@ -73,48 +76,58 @@ struct ContentView: View {
     }
 
     var body: some View {
-        TabView(selection: $selectedTab) {
-            // Dashboard Tab
-            NavigationView {
-                DashboardView()
+        ZStack{
+            TabView(selection: $selectedTab) {
+                // Dashboard Tab
+                NavigationView {
+                    ModernDashboardView()
+                }
+                .tabItem {
+                    Image(systemName: "house.fill")
+                    Text("Home")
+                }
+                .tag(0)
+                
+                // Medicines Tab
+                NavigationView {
+                    MedicineListView()
+                }
+                .tabItem {
+                    Image(systemName: "pills.fill")
+                    Text("Medicines")
+                }
+                .tag(1)
+                
+                // Insights Tab
+                NavigationView {
+                    InsightsView()
+                }
+                .tabItem {
+                    Image(systemName: "chart.pie.fill")
+                    Text("Insights")
+                }
+                .tag(2)
+                
+                // Settings Tab
+                NavigationView {
+                    SettingsView()
+                }
+                .environmentObject(onboardingCoordinator)
+                .tabItem {
+                    Image(systemName: "gear")
+                    Text("Settings")
+                }
+                .tag(3)
+                
             }
-            .tabItem {
-                Image(systemName: "house.fill")
-                Text("Home")
+            .accentColor(AppColors.primaryFallback())
+            // Overlay the onboarding view when needed
+            if onboardingCoordinator.shouldShowOnboarding {
+                OnboardingView(isShowingOnboarding: $onboardingCoordinator.shouldShowOnboarding)
+                    .transition(.opacity)
+                    .zIndex(100) // Ensure it's on top
             }
-            .tag(0)
-
-            // Medicines Tab
-            NavigationView {
-                MedicineListView()
-            }
-            .tabItem {
-                Image(systemName: "pills.fill")
-                Text("Medicines")
-            }
-            .tag(1)
-
-            // Insights Tab
-            NavigationView {
-                InsightsView()
-            }
-            .tabItem {
-                Image(systemName: "chart.pie.fill")
-                Text("Insights")
-            }
-            .tag(2)
-
-            // Settings Tab
-            NavigationView {
-                SettingsView()
-            }
-            .tabItem {
-                Image(systemName: "gear")
-                Text("Settings")
-            }
-            .tag(3)
         }
-        .accentColor(AppColors.primaryFallback())
         .onAppear {
             dashboardRefreshTrigger = UUID()
             refreshAllData()
@@ -146,8 +159,9 @@ struct ContentView: View {
             dashboardRefreshTrigger = UUID()
             refreshAllData()
         }
+        
     }
-    
+        
     private func handleScanResult(result: Result<String, Error>) {
         switch result {
         case .success(let barcode):
